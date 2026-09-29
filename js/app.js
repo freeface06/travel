@@ -24,6 +24,7 @@
     tripTitle: document.getElementById('trip-title'),
     tripPeriod: document.getElementById('trip-period'),
     btnManageTrips: document.getElementById('btn-manage-trips'),
+    btnOpenCloudSync: document.getElementById('btn-open-cloud-sync'),
     btnCopyShareLink: document.getElementById('btn-copy-share-link'),
     btnEditTrip: document.getElementById('btn-edit-trip'),
 
@@ -1119,15 +1120,31 @@
       if (files.length === 0) return;
 
       try {
-        showToast(`${files.length}장의 사진 압축 처리 중...`);
+        showToast(`${files.length}장의 사진 압축 및 처리 중...`);
+        const mgr = (typeof TripSupabase !== 'undefined' ? TripSupabase.supabaseManager : null);
+        const isCloudReady = mgr && typeof mgr.isConfigured === 'function' && mgr.isConfigured();
+
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
           const { dataUrl } = await resizeImage(file, 1200, 0.75);
           const photoId = 'photo-' + Date.now() + '-' + i;
-          await savePhoto(photoId, dataUrl, file.name);
+          let finalPhotoUrl = dataUrl;
+
+          if (isCloudReady) {
+            try {
+              const publicUrl = await mgr.uploadPhoto(dataUrl, file.name);
+              if (publicUrl) {
+                finalPhotoUrl = publicUrl;
+              }
+            } catch (cloudErr) {
+              console.warn('Supabase photo upload fallback to local storage:', cloudErr);
+            }
+          }
+
+          await savePhoto(photoId, finalPhotoUrl, file.name);
           formManager.uploadedPhotos.push({
             id: photoId,
-            dataUrl,
+            dataUrl: finalPhotoUrl,
             filename: file.name
           });
         }
@@ -1644,6 +1661,172 @@
   }
 
   /**
+   * @intent Supabase 클라우드 PostgreSQL DB 및 스토리지 연동 설정 모달
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   */
+  async function openCloudSyncModal() {
+    const mgr = (typeof TripSupabase !== 'undefined' ? TripSupabase.supabaseManager : null);
+    if (!mgr) {
+      showToast('Supabase 연동 모듈을 불러올 수 없습니다.');
+      return;
+    }
+
+    const config = mgr.getConfig();
+    const isConfigured = mgr.isConfigured();
+    const initialStatusState = {
+      status: isConfigured ? 'connected' : 'unconfigured',
+      message: isConfigured ? '연결 확인 대기 중' : '미설정 (로컬 오프라인 모드)'
+    };
+
+    const sqlScript = mgr.getSetupSqlScript();
+    const modalHtml = formManager.renderCloudSyncModalHtml(config, initialStatusState, sqlScript);
+    openModal('Supabase 클라우드 DB & 스토리지 동기화', modalHtml);
+
+    const updateStatusBadge = (status, text) => {
+      const badge = document.getElementById('cloud-status-badge');
+      if (!badge) return;
+      badge.className = `cloud-status-badge status-${status}`;
+      const textSpan = badge.querySelector('.status-indicator-text');
+      if (textSpan) textSpan.textContent = text;
+    };
+
+    // 설정이 이미 되어 있다면 열릴 때 연결 상태 백그라운드 확인
+    if (isConfigured) {
+      mgr.testConnection().then((res) => {
+        if (res.ok) {
+          updateStatusBadge('connected', '연결됨 (클라우드 실시간 동기화 활성)');
+        } else {
+          updateStatusBadge('error', '연결 오류: ' + (res.error || '접근 불가'));
+        }
+      }).catch((err) => {
+        updateStatusBadge('error', '연결 실패: ' + err.message);
+      });
+    }
+
+    // 1. 연결 테스트 버튼 이벤트
+    document.getElementById('btn-cloud-test')?.addEventListener('click', async () => {
+      const urlInput = document.getElementById('supabase-project-url');
+      const keyInput = document.getElementById('supabase-anon-key');
+      const tempUrl = urlInput ? urlInput.value.trim() : '';
+      const tempKey = keyInput ? keyInput.value.trim() : '';
+
+      if (!tempUrl || !tempKey) {
+        showToast('Supabase URL과 Anon Key를 모두 입력해 주세요.');
+        updateStatusBadge('unconfigured', '미설정 (URL/Key 입력 필요)');
+        return;
+      }
+
+      mgr.saveConfig(tempUrl, tempKey);
+      updateStatusBadge('unconfigured', '연결 테스트 중...');
+      showToast('Supabase 연결 상태 확인 중...');
+
+      const res = await mgr.testConnection();
+      if (res.ok) {
+        updateStatusBadge('connected', '연결 성공: trips 테이블 접근 정상');
+        showToast('Supabase 클라우드 연결에 성공했습니다!');
+      } else {
+        updateStatusBadge('error', '연결 실패: ' + (res.error || '테이블 미존재'));
+        showToast('연결 실패: ' + (res.error || 'SQL 스크립트 실행 여부를 확인하세요.'));
+      }
+    });
+
+    // 2. 설정 저장 및 현재 여행 즉시 동기화
+    document.getElementById('cloud-sync-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const url = form.projectUrl.value.trim();
+      const anonKey = form.anonKey.value.trim();
+
+      if (!url || !anonKey) {
+        showToast('Supabase Project URL과 Anon Key를 모두 입력해 주세요.');
+        return;
+      }
+
+      mgr.saveConfig(url, anonKey);
+      showToast('설정 저장 중 및 연결 검증...');
+
+      const testRes = await mgr.testConnection();
+      if (testRes.ok) {
+        updateStatusBadge('connected', '연결됨 (클라우드 실시간 동기화 활성)');
+        const currentTrip = store.getState().trip;
+        if (currentTrip) {
+          await mgr.syncTrip(currentTrip);
+        }
+        showToast('설정이 저장되었으며 현재 여행 계획이 클라우드에 동기화되었습니다.');
+      } else {
+        updateStatusBadge('error', '저장됨 (연결 실패: ' + testRes.error + ')');
+        showToast('저장 완료되었으나 연결 확인 실패: ' + testRes.error);
+      }
+    });
+
+    // 3. 설정 초기화 버튼 이벤트
+    document.getElementById('btn-cloud-clear')?.addEventListener('click', () => {
+      if (confirm('Supabase 클라우드 연결 설정을 초기화하시겠습니까?\n(로컬 데이터는 보존됩니다)')) {
+        mgr.clearConfig();
+        const urlInput = document.getElementById('supabase-project-url');
+        const keyInput = document.getElementById('supabase-anon-key');
+        if (urlInput) urlInput.value = '';
+        if (keyInput) keyInput.value = '';
+        updateStatusBadge('unconfigured', '미설정 (로컬 오프라인 모드)');
+        showToast('클라우드 연결 설정이 해제되었습니다.');
+      }
+    });
+
+    // 4. 로컬 데이터를 클라우드로 즉시 일괄 업로드
+    document.getElementById('btn-cloud-upload-all')?.addEventListener('click', async () => {
+      if (!mgr.isConfigured()) {
+        showToast('먼저 Supabase 설정을 저장하고 연결을 확인해 주세요.');
+        return;
+      }
+      try {
+        showToast('로컬 여행 계획을 클라우드로 업로드 중...');
+        const count = await store.syncAllToCloud();
+        showToast(`${count}개의 여행 계획이 Supabase 클라우드로 안전하게 업로드되었습니다.`);
+      } catch (err) {
+        showToast('클라우드 업로드 실패: ' + err.message);
+      }
+    });
+
+    // 5. 클라우드에서 데이터 가져오기 (복원)
+    document.getElementById('btn-cloud-import')?.addEventListener('click', async () => {
+      if (!mgr.isConfigured()) {
+        showToast('먼저 Supabase 설정을 저장하고 연결을 확인해 주세요.');
+        return;
+      }
+      if (!confirm('Supabase 클라우드에 저장된 여행 데이터를 로컬로 가져와 복원하시겠습니까?')) {
+        return;
+      }
+      try {
+        showToast('클라우드에서 데이터 조회 중...');
+        const res = await store.importFromCloud();
+        if (res.count === 0) {
+          showToast('클라우드에 저장된 여행 계획이 없습니다.');
+        } else {
+          showToast(`클라우드에서 ${res.count}개의 여행 계획을 성공적으로 복원했습니다.`);
+          closeModal();
+        }
+      } catch (err) {
+        showToast('데이터 복원 실패: ' + err.message);
+      }
+    });
+
+    // 6. SQL 설정 스크립트 클립보드 복사
+    document.getElementById('btn-copy-setup-sql')?.addEventListener('click', async () => {
+      const codeTarget = document.getElementById('sql-code-target');
+      const textToCopy = codeTarget ? codeTarget.textContent : mgr.getSetupSqlScript();
+      const success = await copyToClipboard(textToCopy);
+      if (success) {
+        showToast('SQL 스크립트가 복사되었습니다. Supabase 대시보드 SQL Editor에 붙여넣어 실행하세요.');
+      } else {
+        showToast('클립보드 복사에 실패했습니다. 텍스트를 직접 복사해 주세요.');
+      }
+    });
+  }
+
+  /**
    * 앱 초기화 및 이벤트 리스너 바인딩
    */
   function initApp() {
@@ -2010,6 +2193,10 @@
     });
 
     // 13. 상단 헤더 액션 및 여행 관리 버튼
+    dom.btnOpenCloudSync?.addEventListener('click', () => {
+      openCloudSyncModal();
+    });
+
     dom.btnManageTrips?.addEventListener('click', () => {
       openTripManagerModal('list');
     });

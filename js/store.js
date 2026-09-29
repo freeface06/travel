@@ -303,7 +303,7 @@
     }
 
     /**
-     * @intent LocalStorage 데이터 영구 저장 (V2 저장 및 V1 레거시 동시 미러링)
+     * @intent LocalStorage 데이터 영구 저장 및 Supabase 클라우드 백그라운드 동기화
      * @agent  Gemini/manager-develop
      * @branch feat/mytriplog-core
      * @author @developer_name
@@ -322,6 +322,145 @@
       } catch (e) {
         console.error('Failed to persist trips to LocalStorage:', e);
       }
+
+      // Supabase 클라우드 실시간 백그라운드 동기화
+      this.syncCurrentTripToCloud();
+    }
+
+    /**
+     * @intent 상태 영구 저장 및 클라우드 동기화 트리거
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     */
+    saveState() {
+      this.persist();
+    }
+
+    /**
+     * @intent Supabase 관리자 인스턴스 반환
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     * @returns {object|null}
+     */
+    getSupabaseManager() {
+      if (this.customSupabaseManager) {
+        return this.customSupabaseManager;
+      }
+      if (typeof TripSupabase !== 'undefined' && TripSupabase.supabaseManager) {
+        return TripSupabase.supabaseManager;
+      }
+      if (typeof window !== 'undefined' && window.TripSupabase && window.TripSupabase.supabaseManager) {
+        return window.TripSupabase.supabaseManager;
+      }
+      return null;
+    }
+
+    /**
+     * @intent 의존성 주입 및 단위 테스트용 Supabase 매니저 등록
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     * @param {object|null} manager
+     */
+    setSupabaseManager(manager) {
+      this.customSupabaseManager = manager;
+    }
+
+    /**
+     * @intent 현재 활성 여행 계획을 Supabase 클라우드에 백그라운드 비동기 동기화
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     * @returns {Promise<boolean>}
+     */
+    async syncCurrentTripToCloud() {
+      try {
+        const mgr = this.getSupabaseManager();
+        if (mgr && typeof mgr.isConfigured === 'function' && mgr.isConfigured() && this.state.trip) {
+          await mgr.syncTrip(this.state.trip);
+          return true;
+        }
+      } catch (err) {
+        console.warn('Background Supabase sync failed (offline or network error):', err);
+      }
+      return false;
+    }
+
+    /**
+     * @intent Supabase 클라우드에서 전체 여행 목록을 조회하여 로컬 스토어에 병합 및 복원
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     * @returns {Promise<{ count: number, trips: Array<object> }>}
+     */
+    async importFromCloud() {
+      const mgr = this.getSupabaseManager();
+      if (!mgr || typeof mgr.isConfigured !== 'function' || !mgr.isConfigured()) {
+        throw new Error('Supabase 클라우드 설정이 완료되지 않았습니다.');
+      }
+
+      const cloudTrips = await mgr.fetchTrips();
+      if (!cloudTrips || cloudTrips.length === 0) {
+        return { count: 0, trips: this.state.trips };
+      }
+
+      const tripMap = new Map();
+      this.state.trips.forEach((t) => {
+        if (t && t.metadata && t.metadata.id) {
+          tripMap.set(t.metadata.id, t);
+        }
+      });
+
+      cloudTrips.forEach((cloudTrip) => {
+        if (cloudTrip && cloudTrip.metadata && cloudTrip.metadata.id) {
+          tripMap.set(cloudTrip.metadata.id, cloudTrip);
+        }
+      });
+
+      this.state.trips = Array.from(tripMap.values());
+      const hasCurrent = this.state.trips.some((t) => t.metadata && t.metadata.id === this.state.currentTripId);
+      if (!hasCurrent && this.state.trips.length > 0) {
+        this.state.currentTripId = this.state.trips[0].metadata.id;
+      }
+      this.state.trip = this.state.trips.find((t) => t.metadata && t.metadata.id === this.state.currentTripId) || this.state.trips[0];
+      this.state.selectedDay = 1;
+      this.state.selectedItemId = null;
+
+      this.persist();
+      this.notify();
+
+      return { count: cloudTrips.length, trips: this.state.trips };
+    }
+
+    /**
+     * @intent 로컬에 보관된 모든 여행 계획을 Supabase 클라우드로 즉시 일괄 업로드 동기화
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     * @returns {Promise<number>}
+     */
+    async syncAllToCloud() {
+      const mgr = this.getSupabaseManager();
+      if (!mgr || typeof mgr.isConfigured !== 'function' || !mgr.isConfigured()) {
+        throw new Error('Supabase 클라우드 설정이 완료되지 않았습니다.');
+      }
+
+      let count = 0;
+      for (const t of this.state.trips) {
+        if (t && t.metadata && t.metadata.id) {
+          await mgr.syncTrip(t);
+          count++;
+        }
+      }
+      return count;
     }
 
     /**
@@ -520,6 +659,15 @@
 
       this.persist();
       this.notify();
+
+      // Supabase 클라우드 삭제 비동기 전파
+      const mgr = this.getSupabaseManager();
+      if (mgr && typeof mgr.isConfigured === 'function' && mgr.isConfigured()) {
+        mgr.deleteTrip(tripId).catch((err) => {
+          console.warn('Supabase deleteTrip sync failed:', err);
+        });
+      }
+
       return true;
     }
 

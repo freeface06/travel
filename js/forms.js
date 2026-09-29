@@ -488,6 +488,141 @@
 
       return result;
     }
+
+    /**
+     * @intent Supabase 클라우드 동기화 모달 뷰 마크업 생성
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     * @param {{ url: string, anonKey: string }} config
+     * @param {{ status: 'connected' | 'unconfigured' | 'error', message?: string }} statusState
+     * @param {string} sqlScript
+     * @returns {string} HTML 마크업
+     */
+    renderCloudSyncModalHtml(config = { url: '', anonKey: '' }, statusState = { status: 'unconfigured' }, sqlScript = '') {
+      let badgeClass = 'status-unconfigured';
+      let statusLabel = '미설정 (로컬 오프라인 모드)';
+
+      if (statusState.status === 'connected') {
+        badgeClass = 'status-connected';
+        statusLabel = '연결됨 (클라우드 실시간 동기화 활성)';
+      } else if (statusState.status === 'error') {
+        badgeClass = 'status-error';
+        statusLabel = statusState.message || '연결 오류 (설정을 확인해 주세요)';
+      }
+
+      return `
+        <div class="supabase-modal-box">
+          <div class="cloud-header-banner">
+            <div class="cloud-status-badge ${badgeClass}" id="cloud-status-badge">
+              <span class="status-indicator-dot"></span>
+              <span class="status-indicator-text">${escapeHtml(statusLabel)}</span>
+            </div>
+            <p class="cloud-subtext">
+              브라우저 기록 및 캐시를 삭제해도 여행 일정과 사진이 영구 보존되는 Supabase PostgreSQL 및 클라우드 CDN 스토리지 연동입니다.
+            </p>
+          </div>
+
+          <form id="cloud-sync-form" class="cloud-sync-form" novalidate>
+            <div class="form-group">
+              <label class="form-label" for="supabase-project-url">
+                Supabase Project URL
+                <span class="required-mark">*</span>
+              </label>
+              <input
+                type="url"
+                id="supabase-project-url"
+                name="projectUrl"
+                class="form-input"
+                placeholder="https://your-project.supabase.co"
+                value="${escapeHtml(config.url || '')}"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="supabase-anon-key">
+                Supabase Anon Key (public)
+                <span class="required-mark">*</span>
+              </label>
+              <input
+                type="password"
+                id="supabase-anon-key"
+                name="anonKey"
+                class="form-input"
+                placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                value="${escapeHtml(config.anonKey || '')}"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </div>
+
+            <div class="cloud-actions-row">
+              <button type="button" id="btn-cloud-test" class="btn-secondary">
+                연결 테스트
+              </button>
+              <button type="submit" id="btn-cloud-save" class="btn-primary">
+                설정 저장 및 동기화
+              </button>
+              <button type="button" id="btn-cloud-clear" class="btn-danger-outline">
+                설정 초기화
+              </button>
+            </div>
+          </form>
+
+          <div class="cloud-data-actions-section">
+            <h4 class="cloud-section-title">데이터 동기화 및 복원</h4>
+            <div class="cloud-data-buttons-grid">
+              <button type="button" id="btn-cloud-upload-all" class="btn-sync-action">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                  <path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/>
+                </svg>
+                <div class="sync-action-text">
+                  <strong>로컬 데이터를 클라우드로 즉시 업로드</strong>
+                  <small>현재 기기의 모든 여행 계획을 Supabase로 일괄 백업합니다.</small>
+                </div>
+              </button>
+              <button type="button" id="btn-cloud-import" class="btn-sync-action">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                  <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                </svg>
+                <div class="sync-action-text">
+                  <strong>클라우드에서 데이터 가져오기</strong>
+                  <small>기록 삭제 후에도 클라우드에 보관된 여행 데이터를 1초 만에 복원합니다.</small>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <div class="cloud-guide-accordion">
+            <details class="cloud-sql-details">
+              <summary class="cloud-sql-summary">
+                <span>Supabase 1분 무료 설정 가이드 &amp; SQL 스크립트</span>
+                <svg class="summary-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                  <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+                </svg>
+              </summary>
+              <div class="cloud-guide-content">
+                <ol class="cloud-guide-steps">
+                  <li><strong>supabase.com</strong>에서 무료 계정 생성 및 [New Project]를 만듭니다.</li>
+                  <li>좌측 메뉴 <strong>[SQL Editor]</strong>에 아래 SQL 스크립트를 붙여넣고 <strong>[Run]</strong>을 클릭합니다.</li>
+                  <li>좌측 메뉴 <strong>[Project Settings] &gt; [API]</strong>에서 Project URL과 anon public key를 복사하여 위 설정에 입력합니다.</li>
+                </ol>
+                <div class="sql-box-header">
+                  <span>SQL 원클릭 스크립트 (trips 테이블 + trip-photos 버킷 생성)</span>
+                  <button type="button" id="btn-copy-setup-sql" class="btn-copy-sql">
+                    SQL 복사
+                  </button>
+                </div>
+                <pre class="sql-code-snippet"><code id="sql-code-target">${escapeHtml(sqlScript)}</code></pre>
+              </div>
+            </details>
+          </div>
+        </div>
+      `;
+    }
   }
 
   const formManager = new FormManager();

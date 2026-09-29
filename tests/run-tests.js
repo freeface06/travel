@@ -8,21 +8,37 @@
 
 const assert = require('assert');
 const path = require('path');
+const fs = require('fs');
+
+// Node.js 환경용 LocalStorage Mock
+if (typeof localStorage === 'undefined') {
+  let mockStore = {};
+  global.localStorage = {
+    getItem: (key) => (Object.prototype.hasOwnProperty.call(mockStore, key) ? mockStore[key] : null),
+    setItem: (key, val) => { mockStore[key] = String(val); },
+    removeItem: (key) => { delete mockStore[key]; },
+    clear: () => { mockStore = {}; }
+  };
+}
 
 // 대상 모듈 로드
 const TripExpense = require(path.join(__dirname, '../js/expense.js'));
 const TripStore = require(path.join(__dirname, '../js/store.js'));
 const Icons = require(path.join(__dirname, '../js/icons.js'));
 const TripShare = require(path.join(__dirname, '../js/share.js'));
+const TripSupabase = require(path.join(__dirname, '../js/supabase.js'));
 
 let totalTests = 0;
 let passedTests = 0;
 let failedTests = 0;
 
-function runTest(testName, testFn) {
+async function runTest(testName, testFn) {
   totalTests++;
   try {
-    testFn();
+    const res = testFn();
+    if (res && typeof res.then === 'function') {
+      await res;
+    }
     passedTests++;
     console.log(`[PASS] ${testName}`);
   } catch (err) {
@@ -32,9 +48,10 @@ function runTest(testName, testFn) {
   }
 }
 
-console.log('====================================================');
-console.log('   MyTripLog Core Unit Test Suite (Node.js Test Runner)   ');
-console.log('====================================================\n');
+async function runAllTests() {
+  console.log('====================================================');
+  console.log('   MyTripLog Core Unit Test Suite (Node.js Test Runner)   ');
+  console.log('====================================================\n');
 
 // --------------------------------------------------------------------------
 // 1. 환율 환산 엔진 (Currency Conversion Tests)
@@ -403,6 +420,7 @@ runTest('7-4. 기존 여행 계획 복제 (duplicateTrip) 및 독립적 수정 �
 });
 
 runTest('7-5. 여행 계획 삭제 (deleteTrip) 및 최소 1개 유지 방어 검증', () => {
+  if (typeof localStorage !== 'undefined') localStorage.clear();
   const store = new TripStore.Store();
   // 1개만 있을 때 삭제 시도 -> 실패(false) 및 유지
   assert.strictEqual(store.getTrips().length, 1);
@@ -422,19 +440,246 @@ runTest('7-5. 여행 계획 삭제 (deleteTrip) 및 최소 1개 유지 방어 �
   assert.strictEqual(store.getState().currentTripId, store.getTrips()[0].metadata.id);
 });
 
-// --------------------------------------------------------------------------
-// 결과 종합 요약
-// --------------------------------------------------------------------------
-console.log('\n====================================================');
-console.log(`[TEST SUMMARY]`);
-console.log(`Total Tests : ${totalTests}`);
-console.log(`Passed      : ${passedTests}`);
-console.log(`Failed      : ${failedTests}`);
-console.log('====================================================');
+  // --------------------------------------------------------------------------
+  // 8. Supabase 연동 모듈 및 클라우드 동기화 엔진 검증
+  // --------------------------------------------------------------------------
+  console.log('\n--- [Suite 8: Supabase 연동 모듈 및 클라우드 동기화 엔진 검증] ---');
 
-if (failedTests > 0) {
-  process.exit(1);
-} else {
-  console.log('[V] All unit tests completed successfully!');
-  process.exit(0);
+  await runTest('8-1. TripSupabase 모듈 로드 및 초기 미설정 상태 검증', () => {
+    const mgr = new TripSupabase.SupabaseClientManager();
+    mgr.clearConfig();
+    assert.strictEqual(mgr.isConfigured(), false);
+    assert.strictEqual(mgr.getClient(), null);
+  });
+
+  await runTest('8-2. saveConfig, getConfig, clearConfig 설정 생명주기 검증', () => {
+    const mgr = new TripSupabase.SupabaseClientManager();
+    const saved = mgr.saveConfig('https://myproject.supabase.co', 'anon-secret-key-12345');
+    assert.strictEqual(saved.url, 'https://myproject.supabase.co');
+    assert.strictEqual(saved.anonKey, 'anon-secret-key-12345');
+    assert.strictEqual(mgr.isConfigured(), true);
+
+    const config = mgr.getConfig();
+    assert.strictEqual(config.url, 'https://myproject.supabase.co');
+    assert.strictEqual(config.anonKey, 'anon-secret-key-12345');
+
+    mgr.clearConfig();
+    assert.strictEqual(mgr.isConfigured(), false);
+    const cleared = mgr.getConfig();
+    assert.strictEqual(cleared.url, '');
+    assert.strictEqual(cleared.anonKey, '');
+  });
+
+  await runTest('8-3. getSetupSqlScript() 표준 SQL 스크립트 무결성 검증', () => {
+    const mgr = new TripSupabase.SupabaseClientManager();
+    const sql = mgr.getSetupSqlScript();
+    assert.ok(sql.includes('CREATE TABLE IF NOT EXISTS public.trips'));
+    assert.ok(sql.includes('ALTER TABLE public.trips ENABLE ROW LEVEL SECURITY'));
+    assert.ok(sql.includes('INSERT INTO storage.buckets (id, name, public)'));
+    assert.ok(sql.includes('\'trip-photos\''));
+    assert.ok(sql.includes('CREATE POLICY "Public photos access"'));
+  });
+
+  await runTest('8-4. base64ToBlob 변환 유틸리티의 안전한 Blob 반환 검증', () => {
+    const sampleText = 'MyTripLog photo binary test data';
+    const base64Data = Buffer.from(sampleText).toString('base64');
+    const dataUrl = `data:image/jpeg;base64,${base64Data}`;
+
+    const blob = TripSupabase.base64ToBlob(dataUrl, 'image/jpeg');
+    assert.ok(blob);
+    assert.strictEqual(blob.type, 'image/jpeg');
+    assert.ok(blob.size > 0);
+
+    // 잘못된 입력에 대한 안전한 null 반환
+    assert.strictEqual(TripSupabase.base64ToBlob(null), null);
+    assert.strictEqual(TripSupabase.base64ToBlob(''), null);
+  });
+
+  await runTest('8-5. Mock Supabase 클라이언트를 통한 DB 쿼리(연결/동기화/삭제/조회) 검증', async () => {
+    const mgr = new TripSupabase.SupabaseClientManager();
+    mgr.saveConfig('https://myproject.supabase.co', 'anon-test-key');
+
+    // 메모리 내 Mock Supabase 클라이언트 구축
+    const mockDb = new Map();
+    const mockClient = {
+      from: (tableName) => {
+        assert.strictEqual(tableName, 'trips');
+        return {
+          select: () => ({
+            limit: async () => ({ data: [{ id: 'mock-1' }], error: null }),
+            order: async () => ({
+              data: Array.from(mockDb.values()),
+              error: null
+            })
+          }),
+          upsert: async (record) => {
+            mockDb.set(record.id, record);
+            return { data: record, error: null };
+          },
+          delete: () => ({
+            eq: async (field, val) => {
+              if (field === 'id') {
+                mockDb.delete(val);
+              }
+              return { error: null };
+            }
+          })
+        };
+      }
+    };
+
+    mgr.setClient(mockClient);
+
+    // 1) 연결 테스트
+    const connRes = await mgr.testConnection();
+    assert.strictEqual(connRes.ok, true);
+
+    // 2) 여행 동기화 (upsert)
+    const sampleTrip = {
+      metadata: {
+        id: 'trip-supabase-test-1',
+        title: '클라우드 동기화 테스트 여행',
+        startDate: '2026-10-01',
+        endDate: '2026-10-05',
+        baseCurrency: 'KRW'
+      },
+      items: []
+    };
+    const syncRes = await mgr.syncTrip(sampleTrip);
+    assert.strictEqual(syncRes.ok, true);
+    assert.strictEqual(mockDb.size, 1);
+
+    // 3) 여행 목록 조회 (fetchTrips)
+    const fetched = await mgr.fetchTrips();
+    assert.strictEqual(fetched.length, 1);
+    assert.strictEqual(fetched[0].metadata.id, 'trip-supabase-test-1');
+
+    // 4) 여행 삭제 (deleteTrip)
+    const delRes = await mgr.deleteTrip('trip-supabase-test-1');
+    assert.strictEqual(delRes.ok, true);
+    assert.strictEqual(mockDb.size, 0);
+  });
+
+  await runTest('8-6. Mock Supabase Storage를 통한 uploadPhoto() CDN URL 반환 검증', async () => {
+    const mgr = new TripSupabase.SupabaseClientManager();
+    mgr.saveConfig('https://myproject.supabase.co', 'anon-test-key');
+
+    let uploadedPath = '';
+    const mockStorageClient = {
+      storage: {
+        from: (bucketId) => {
+          assert.strictEqual(bucketId, 'trip-photos');
+          return {
+            upload: async (path, blob, options) => {
+              uploadedPath = path;
+              return { data: { path }, error: null };
+            },
+            getPublicUrl: (path) => ({
+              data: {
+                publicUrl: `https://myproject.supabase.co/storage/v1/object/public/trip-photos/${path}`
+              }
+            })
+          };
+        }
+      }
+    };
+
+    mgr.setClient(mockStorageClient);
+    const sampleDataUrl = 'data:image/jpeg;base64,' + Buffer.from('test-image').toString('base64');
+    const publicUrl = await mgr.uploadPhoto(sampleDataUrl, 'tokyo_tower.jpg');
+
+    assert.ok(publicUrl);
+    assert.ok(publicUrl.includes('https://myproject.supabase.co/storage/v1/object/public/trip-photos/'));
+    assert.ok(uploadedPath.startsWith('trip-photos/'));
+    assert.ok(uploadedPath.endsWith('.jpg'));
+  });
+
+  await runTest('8-7. Store의 importFromCloud() 및 syncAllToCloud() 클라우드 연동 검증', async () => {
+    const store = new TripStore.Store();
+    const mgr = new TripSupabase.SupabaseClientManager();
+    mgr.saveConfig('https://myproject.supabase.co', 'anon-test-key');
+
+    const cloudTripsData = [
+      {
+        metadata: {
+          id: 'cloud-trip-001',
+          title: '클라우드 복원 여행 계획',
+          startDate: '2026-11-01',
+          endDate: '2026-11-05',
+          participants: ['나', '친구'],
+          baseCurrency: 'KRW'
+        },
+        items: []
+      }
+    ];
+
+    let syncedTripCount = 0;
+    const mockMgr = {
+      isConfigured: () => true,
+      fetchTrips: async () => cloudTripsData,
+      syncTrip: async (trip) => {
+        syncedTripCount++;
+        return { ok: true };
+      },
+      deleteTrip: async () => ({ ok: true })
+    };
+
+    store.setSupabaseManager(mockMgr);
+
+    // syncAllToCloud 실행 검증
+    const syncCount = await store.syncAllToCloud();
+    assert.strictEqual(syncCount, store.getTrips().length);
+    assert.strictEqual(syncedTripCount, store.getTrips().length);
+
+    // importFromCloud 실행 검증 (병합 복원)
+    const importRes = await store.importFromCloud();
+    assert.ok(importRes.count >= 1);
+    const foundCloudTrip = store.getTrips().find((t) => t.metadata && t.metadata.id === 'cloud-trip-001');
+    assert.ok(foundCloudTrip);
+    assert.strictEqual(foundCloudTrip.metadata.title, '클라우드 복원 여행 계획');
+  });
+
+  await runTest('8-8. 엄격한 No-Emoji 원칙 검증 (Strict No-Emoji Policy)', () => {
+    const targetFiles = [
+      path.join(__dirname, '../js/supabase.js'),
+      path.join(__dirname, '../js/store.js'),
+      path.join(__dirname, '../js/forms.js'),
+      path.join(__dirname, '../index.html'),
+      path.join(__dirname, '../css/components.css')
+    ];
+
+    const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}]/u;
+
+    for (const filePath of targetFiles) {
+      if (fs.existsSync(filePath)) {
+        const content = fs.readFileSync(filePath, 'utf8');
+        const match = content.match(emojiRegex);
+        if (match) {
+          assert.fail(`파일 [${path.basename(filePath)}]에 유니코드 이모지(${match[0]})가 포함되어 있습니다.`);
+        }
+      }
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // 결과 종합 요약
+  // --------------------------------------------------------------------------
+  console.log('\n====================================================');
+  console.log(`[TEST SUMMARY]`);
+  console.log(`Total Tests : ${totalTests}`);
+  console.log(`Passed      : ${passedTests}`);
+  console.log(`Failed      : ${failedTests}`);
+  console.log('====================================================');
+
+  if (failedTests > 0) {
+    process.exit(1);
+  } else {
+    console.log('[V] All unit tests completed successfully!');
+    process.exit(0);
+  }
 }
+
+runAllTests().catch((err) => {
+  console.error('Test execution fatal error:', err);
+  process.exit(1);
+});
