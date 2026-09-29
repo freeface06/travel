@@ -22,7 +22,6 @@
     // 헤더 요소
     tripTitle: document.getElementById('trip-title'),
     tripPeriod: document.getElementById('trip-period'),
-    tripParticipants: document.getElementById('trip-participants'),
     btnEditTrip: document.getElementById('btn-edit-trip'),
     btnExportJson: document.getElementById('btn-export-json'),
     btnImportJson: document.getElementById('btn-import-json'),
@@ -229,8 +228,6 @@
     const meta = trip.metadata || {};
     dom.tripTitle.textContent = meta.title || '나의 여행 일정';
     dom.tripPeriod.textContent = `${meta.startDate || '출발일 미정'} ~ ${meta.endDate || '도착일 미정'}`;
-    const members = (meta.participants || []).join(', ');
-    dom.tripParticipants.textContent = members ? `동행: ${members}` : '동행: 미정';
   }
 
   /**

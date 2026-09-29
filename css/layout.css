@@ -36,22 +36,26 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
 .brand-logo-badge {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   border-radius: var(--radius-md);
   background-color: var(--primary-600);
   color: #ffffff;
+  flex-shrink: 0;
 }
 
 .brand-info {
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  min-width: 0;
 }
 
 .brand-title {
@@ -59,17 +63,66 @@
   font-weight: 700;
   color: var(--text-main);
   letter-spacing: -0.02em;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.brand-sub {
-  font-size: 0.75rem;
+.brand-period {
+  font-size: 0.72rem;
   color: var(--text-muted);
+  font-weight: 500;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
+}
+
+/* 헤더 액션 버튼 (데스크톱 컴팩트 캡슐 / 모바일 원형 아이콘) */
+.btn-header-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  background-color: var(--bg-surface);
+  color: var(--gray-700);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-xs);
+  flex-shrink: 0;
+}
+
+.btn-header-action svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  flex-shrink: 0;
+}
+
+.btn-header-action:hover {
+  background-color: var(--gray-100);
+  color: var(--primary-600);
+  border-color: var(--primary-300);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-header-action:active {
+  transform: scale(0.94);
+  background-color: var(--gray-200);
 }
 
 /* 메인 작업 영역: 데스크톱 스플릿 뷰 */
@@ -467,13 +520,13 @@
     bottom: 0 !important;
     left: 0 !important;
     right: 0 !important;
-    height: 56px !important;
+    height: 62px !important;
     background-color: #ffffff !important;
-    border-top: 1px solid var(--border-subtle);
-    align-items: center;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    align-items: stretch;
     justify-content: space-around;
     z-index: 9500 !important;
-    box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.12) !important;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08) !important;
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
@@ -481,7 +534,6 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-
     align-items: center;
     justify-content: center;
     height: 100%;
@@ -489,8 +541,12 @@
     border: none;
     cursor: pointer;
     color: var(--gray-500);
-    padding: 4px 0;
+    padding: 6px 0 4px 0;
+    gap: 3px;
     transition: color var(--transition-fast);
+    position: relative;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .m-nav-item:hover,
@@ -498,31 +554,44 @@
     color: var(--primary-600);
   }
 
+  .m-nav-item.active .m-nav-label {
+    font-weight: 700;
+  }
+
   .m-nav-icon {
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 24px;
+    height: 24px;
+  }
+
+  .m-nav-icon svg {
+    width: 22px;
     height: 22px;
   }
 
   .m-nav-label {
     font-size: 0.68rem;
     font-weight: 600;
-    margin-top: 2px;
+    line-height: 1;
   }
 
   /* 중앙 강조 FAB 버튼 */
   .m-nav-fab {
     position: relative;
-    top: -10px;
     flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: flex-end;
+    padding-bottom: 6px;
+    overflow: visible;
   }
 
   .m-nav-fab-btn {
+    position: absolute;
+    top: -16px;
     width: 48px;
     height: 48px;
     border-radius: var(--radius-full);
@@ -531,16 +600,22 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
-    transition: transform var(--transition-fast);
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.42);
+    border: 3px solid #ffffff;
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+  }
+
+  .m-nav-fab-btn svg {
+    width: 26px;
+    height: 26px;
   }
 
   .m-nav-fab:active .m-nav-fab-btn {
-    transform: scale(0.92);
+    transform: scale(0.90);
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
   }
 
   .m-nav-fab .m-nav-label {
-    margin-top: 4px;
     color: var(--primary-700);
     font-weight: 700;
   }
@@ -565,35 +640,54 @@
 /* 모바일 폰 뷰포트 (640px 이하) */
 @media (max-width: 640px) {
   .app-header {
-    height: 54px;
+    height: 56px;
     padding: 0 12px;
   }
 
   .brand-logo-badge {
-    width: 32px;
-    height: 32px;
+    width: 34px;
+    height: 34px;
   }
 
   .brand-logo-badge svg {
-    width: 18px;
-    height: 18px;
+    width: 19px;
+    height: 19px;
   }
 
   .brand-title {
     font-size: 0.95rem;
-    max-width: 150px;
+    max-width: 140px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  /* 헤더 버튼: 모바일에서 텍스트 숨김 및 컴팩트 아이콘 모드 */
-  .header-actions .btn span {
+  .brand-period {
+    font-size: 0.68rem;
+    max-width: 140px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* 헤더 액션 버튼: 텍스트 숨김 및 선명한 38x38px 원형 버튼 */
+  .btn-header-label {
     display: none;
   }
 
-  .header-actions .btn {
-    padding: 7px 10px;
+  .btn-header-action {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border-subtle);
+    background-color: var(--gray-50);
+  }
+
+  .btn-header-action svg {
+    width: 20px;
+    height: 20px;
+    color: var(--gray-700);
   }
 
   .header-actions {
@@ -623,7 +717,27 @@
   }
 
   .brand-title {
-    max-width: 120px;
+    max-width: 110px;
+    font-size: 0.88rem;
+  }
+
+  .brand-period {
+    max-width: 110px;
+    font-size: 0.65rem;
+  }
+
+  .btn-header-action {
+    width: 34px;
+    height: 34px;
+  }
+
+  .btn-header-action svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .header-actions {
+    gap: 4px;
   }
 
   .panel-nav-tabs {
