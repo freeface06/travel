@@ -22,12 +22,12 @@
     // 헤더 요소
     tripTitle: document.getElementById('trip-title'),
     tripPeriod: document.getElementById('trip-period'),
+    btnCopyShareLink: document.getElementById('btn-copy-share-link'),
     btnEditTrip: document.getElementById('btn-edit-trip'),
 
-    // 내비게이션 탭
+    // 내비게이션 탭 (일정, 경비)
     tabTimeline: document.getElementById('tab-timeline'),
     tabExpense: document.getElementById('tab-expense'),
-    tabShare: document.getElementById('tab-share'),
     daySelectorBar: document.getElementById('day-selector-bar'),
     dayChipSliderWrapper: document.getElementById('day-chip-slider-wrapper'),
 
@@ -37,13 +37,12 @@
     bottomSheetHandle: document.getElementById('bottom-sheet-handle'),
     btnSheetClose: document.getElementById('btn-sheet-close'),
 
-    // 모바일 전용 하단 내비게이션 요소
+    // 모바일 전용 하단 내비게이션 요소 (지도, 일정, 추가, 경비)
     mobileBottomNav: document.getElementById('mobile-bottom-nav'),
     mNavMap: document.getElementById('m-nav-map'),
     mNavTimeline: document.getElementById('m-nav-timeline'),
     mNavAdd: document.getElementById('m-nav-add'),
     mNavExpense: document.getElementById('m-nav-expense'),
-    mNavShare: document.getElementById('m-nav-share'),
 
     // 지도 컨트롤
     btnPinDropToggle: document.getElementById('btn-pin-drop-toggle'),
@@ -988,7 +987,7 @@
     // 6. 플로팅 + 일정 추가 버튼
     dom.btnAddItemFloating?.addEventListener('click', () => openItemModal());
 
-    // 7. 내비게이션 탭 이벤트
+    // 7. 내비게이션 탭 이벤트 (일정, 경비)
     dom.tabTimeline.addEventListener('click', () => {
       store.setActiveTab('timeline');
       if (currentSheetState === 'hidden') setBottomSheetState('half');
@@ -997,17 +996,13 @@
       store.setActiveTab('expense');
       if (currentSheetState === 'hidden') setBottomSheetState('half');
     });
-    dom.tabShare.addEventListener('click', () => {
-      store.setActiveTab('share');
-      if (currentSheetState === 'hidden') setBottomSheetState('half');
-    });
 
     // 8. 모바일 바텀시트 닫기 버튼 이벤트
     dom.btnSheetClose?.addEventListener('click', () => {
       setBottomSheetState('hidden');
     });
 
-    // 9. 모바일 하단 내비게이션 바 버튼 리스너
+    // 9. 모바일 하단 내비게이션 바 버튼 리스너 (지도, 일정, 추가, 경비)
     dom.mNavMap?.addEventListener('click', () => {
       setBottomSheetState('hidden');
       showToast('지도 전체화면 모드');
@@ -1032,15 +1027,6 @@
         setBottomSheetState('half');
       } else {
         syncMobileNavActiveState('expense');
-      }
-    });
-
-    dom.mNavShare?.addEventListener('click', () => {
-      store.setActiveTab('share');
-      if (currentSheetState === 'hidden' || currentSheetState === 'peek') {
-        setBottomSheetState('half');
-      } else {
-        syncMobileNavActiveState('share');
       }
     });
 
@@ -1079,6 +1065,26 @@
     });
 
     // 13. 상단 헤더 액션 버튼
+    dom.btnCopyShareLink?.addEventListener('click', async () => {
+      const currentTrip = store.getState().trip;
+      const shareUrl = generateShareUrl(currentTrip);
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(shareUrl);
+        } else {
+          const tempInput = document.createElement('textarea');
+          tempInput.value = shareUrl;
+          document.body.appendChild(tempInput);
+          tempInput.select();
+          document.execCommand('copy');
+          tempInput.remove();
+        }
+        showToast('여행 일정 링크가 복사되었습니다!');
+      } catch (err) {
+        showToast('링크 복사에 실패했습니다.');
+      }
+    });
+
     dom.btnEditTrip?.addEventListener('click', openTripMetaModal);
 
     // 14. 중앙 상태(Store) 변경 감지 구독
@@ -1088,11 +1094,10 @@
       // 헤더 렌더링
       renderHeader(trip);
 
-      // 탭 활성화 상태
-      [dom.tabTimeline, dom.tabExpense, dom.tabShare].forEach((t) => t.classList.remove('active'));
-      if (activeTab === 'timeline') dom.tabTimeline.classList.add('active');
-      else if (activeTab === 'expense') dom.tabExpense.classList.add('active');
-      else if (activeTab === 'share') dom.tabShare.classList.add('active');
+      // 탭 활성화 상태 (일정, 경비)
+      [dom.tabTimeline, dom.tabExpense].forEach((t) => t?.classList.remove('active'));
+      if (activeTab === 'timeline') dom.tabTimeline?.classList.add('active');
+      else if (activeTab === 'expense') dom.tabExpense?.classList.add('active');
 
       // Day 선택 탭 표시/숨김
       if (activeTab === 'timeline') {
@@ -1102,9 +1107,6 @@
       } else if (activeTab === 'expense') {
         if (dom.dayChipSliderWrapper) dom.dayChipSliderWrapper.classList.add('hidden');
         renderExpensePanel(trip);
-      } else if (activeTab === 'share') {
-        if (dom.dayChipSliderWrapper) dom.dayChipSliderWrapper.classList.add('hidden');
-        renderSharePanel(trip);
       }
 
       // 모바일 하단 내비게이션 탭 동기화
