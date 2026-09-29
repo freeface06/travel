@@ -1,0 +1,291 @@
+/**
+ * @intent 반응형 스플릿 뷰(Desktop) & 3단계 터치 바텀시트(Mobile) 레이아웃
+ * @agent  Gemini/manager-develop
+ * @branch feat/mytriplog-core
+ * @author @developer_name
+ * @date   2026-09-29
+ */
+
+/* 전체 뷰포트 레이아웃 */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background-color: var(--bg-app);
+}
+
+/* 상단 메인 헤더 */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 60px;
+  padding: 0 20px;
+  background-color: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  z-index: var(--z-header);
+  flex-shrink: 0;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-logo-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background-color: var(--primary-600);
+  color: #ffffff;
+}
+
+.brand-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.brand-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.02em;
+}
+
+.brand-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 메인 작업 영역: 데스크톱 스플릿 뷰 */
+.app-body {
+  display: flex;
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 좌측 사이드바 패널 (일정 타임라인, 정산, 공유) */
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  width: 520px;
+  max-width: 45vw;
+  background-color: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle);
+  z-index: var(--z-panel);
+  position: relative;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition-normal);
+}
+
+/* 패널 상단 네비게이션 탭 */
+.panel-nav-tabs {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface-subtle);
+  padding: 4px 8px;
+  gap: 4px;
+}
+
+.panel-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  transition: all var(--transition-fast);
+}
+
+.panel-nav-btn:hover {
+  background-color: var(--gray-200);
+  color: var(--text-main);
+}
+
+.panel-nav-btn.active {
+  background-color: var(--bg-surface);
+  color: var(--primary-600);
+  box-shadow: var(--shadow-sm);
+}
+
+/* 일차(Day) 탭 바 */
+.day-selector-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background-color: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.day-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  font-weight: 600;
+  background-color: var(--gray-100);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  transition: all var(--transition-fast);
+}
+
+.day-chip:hover {
+  background-color: var(--gray-200);
+}
+
+.day-chip.active {
+  background-color: var(--primary-600);
+  color: #ffffff;
+  border-color: var(--primary-600);
+}
+
+/* 패널 컨텐츠 스크롤 영역 */
+.panel-content-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  background-color: var(--bg-surface-subtle);
+}
+
+/* 우측 지도 뷰 */
+.map-view-container {
+  flex: 1;
+  position: relative;
+  height: 100%;
+  background-color: #e5e7eb;
+}
+
+#map-container {
+  width: 100%;
+  height: 100%;
+}
+
+/* 플로팅 컨트롤 (지도 위) */
+.map-floating-controls {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn-floating {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-radius: var(--radius-full);
+  background-color: var(--bg-surface);
+  color: var(--text-main);
+  box-shadow: var(--shadow-md);
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: 1px solid var(--border-subtle);
+  transition: all var(--transition-fast);
+}
+
+.btn-floating:hover {
+  background-color: var(--primary-50);
+  color: var(--primary-600);
+  border-color: var(--primary-500);
+}
+
+.btn-floating.active {
+  background-color: var(--primary-600);
+  color: #ffffff;
+  border-color: var(--primary-600);
+}
+
+/* ==========================================================================
+   모바일 반응형 레이아웃 및 3단계 바텀시트
+   ========================================================================== */
+.bottom-sheet-handle {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .app-body {
+    flex-direction: column;
+  }
+
+  .map-view-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* 사이드바가 모바일에서는 바텀시트로 변환 */
+  .side-panel {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    max-width: 100vw;
+    background-color: var(--bg-surface);
+    border-radius: 20px 20px 0 0;
+    box-shadow: var(--shadow-sheet);
+    z-index: var(--z-bottomsheet);
+    transition: height var(--transition-slow), transform var(--transition-slow);
+    will-change: height, transform;
+  }
+
+  /* 3단계 바텀시트 상태 */
+  .side-panel.sheet-peek {
+    height: 80px !important;
+  }
+
+  .side-panel.sheet-half {
+    height: 50vh !important;
+  }
+
+  .side-panel.sheet-full {
+    height: 90vh !important;
+  }
+
+  /* 드래그 핸들 노출 */
+  .bottom-sheet-handle {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 24px;
+    width: 100%;
+    cursor: grab;
+    flex-shrink: 0;
+  }
+
+  .bottom-sheet-handle-bar {
+    width: 44px;
+    height: 4px;
+    background-color: var(--gray-300);
+    border-radius: var(--radius-full);
+  }
+
+  .panel-content-area {
+    padding: 12px;
+  }
+}

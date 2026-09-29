@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <!--
+    @intent MyTripLog 단일 진실 원천(SSOT) 진입점 웹 애플리케이션
+    @agent  Gemini/manager-develop
+    @branch feat/mytriplog-core
+    @author @developer_name
+    @date   2026-09-29
+  -->
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>MyTripLog - 여행 일정 & 1/N 최소 송금 정산기</title>
+
+  <!-- Leaflet CDN -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+  <!-- LZ-String CDN (무서버 압축 공유) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js" crossorigin=""></script>
+
+  <!-- 스타일시트 -->
+  <link rel="stylesheet" href="css/reset.css" />
+  <link rel="stylesheet" href="css/variables.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/components.css" />
+</head>
+<body>
+  <div class="app-container">
+    <!-- 상단 헤더 -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="brand-logo-badge">
+          <!-- 비행기 SVG 아이콘 -->
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+            <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+          </svg>
+        </div>
+        <div class="brand-info">
+          <h1 id="trip-title" class="brand-title">로딩 중...</h1>
+          <div style="display: flex; gap: 8px; font-size: 0.75rem; color: var(--text-muted);">
+            <span id="trip-period">기간 로딩 중</span>
+            <span>&bull;</span>
+            <span id="trip-participants">동행</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button type="button" id="btn-edit-trip" class="btn btn-outline btn-sm" title="여행 정보 수정">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+            <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+          </svg>
+          <span>여행 설정</span>
+        </button>
+        <button type="button" id="btn-export-json" class="btn btn-outline btn-sm" title="JSON 백업 다운로드">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+          </svg>
+          <span>내보내기</span>
+        </button>
+        <button type="button" id="btn-import-json" class="btn btn-outline btn-sm" title="JSON 백업 불러오기">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+            <path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/>
+          </svg>
+          <span>가져오기</span>
+        </button>
+        <input type="file" id="file-input-import" accept=".json" style="display: none;" />
+      </div>
+    </header>
+
+    <!-- 메인 분할 뷰 -->
+    <main class="app-body">
+      <!-- 좌측 사이드 패널 (모바일에서는 바텀시트로 변환) -->
+      <aside class="side-panel sheet-half" id="side-panel">
+        <!-- 모바일 바텀시트 전용 핸들 바 -->
+        <div class="bottom-sheet-handle" id="bottom-sheet-handle" title="탭하여 크기 조절">
+          <div class="bottom-sheet-handle-bar"></div>
+        </div>
+
+        <!-- 기능 네비게이션 탭 -->
+        <nav class="panel-nav-tabs">
+          <button type="button" class="panel-nav-btn active" id="tab-timeline">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/>
+            </svg>
+            <span>일정 타임라인</span>
+          </button>
+          <button type="button" class="panel-nav-btn" id="tab-expense">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/>
+            </svg>
+            <span>경비 & 1/N 정산</span>
+          </button>
+          <button type="button" class="panel-nav-btn" id="tab-share">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92c0-1.61-1.31-2.92-2.92-2.92z"/>
+            </svg>
+            <span>무서버 공유</span>
+          </button>
+        </nav>
+
+        <!-- 일차(Day) 칩 바 -->
+        <div class="day-selector-bar" id="day-selector-bar">
+          <!-- 동적 렌더링 -->
+        </div>
+
+        <!-- 탭 컨텐츠 영역 -->
+        <div class="panel-content-area" id="panel-content-area">
+          <!-- 타임라인 또는 정산 또는 공유 렌더링 -->
+        </div>
+      </aside>
+
+      <!-- 우측 Leaflet 지도 영역 -->
+      <section class="map-view-container" aria-label="여행 지도">
+        <div id="map-container"></div>
+
+        <!-- 플로팅 컨트롤 -->
+        <div class="map-floating-controls">
+          <button type="button" id="btn-pin-drop-toggle" class="btn-floating" title="지도 위 직접 클릭하여 핀 지정 모드">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+            </svg>
+            <span>핀 지정 모드</span>
+          </button>
+          <button type="button" id="btn-add-item-floating" class="btn-floating active" title="새 일정 추가">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+            </svg>
+            <span>일정 추가</span>
+          </button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 공통 모달 대화상자 -->
+  <div class="modal-overlay" id="modal-overlay" role="dialog" aria-modal="true">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h2 id="modal-title" class="modal-title">일정 편집</h2>
+        <button type="button" id="modal-close-btn" class="btn-icon" aria-label="닫기">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" id="modal-container">
+        <!-- 동적 폼 삽입 -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 사진 전체 화면 라이트박스 -->
+  <div class="lightbox-overlay" id="lightbox-overlay" role="dialog" aria-modal="true">
+    <div class="lightbox-content-box">
+      <button type="button" id="lightbox-close-btn" class="lightbox-close-btn" aria-label="닫기">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+        </svg>
+      </button>
+      <img id="lightbox-img" src="" alt="확대 보기" />
+    </div>
+  </div>
+
+  <!-- 토스트 알림 컨테이너 -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- 스크립트 모듈 로드 -->
+  <script src="js/icons.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/expense.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/geocoder.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/forms.js"></script>
+  <script src="js/share.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

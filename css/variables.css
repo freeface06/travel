@@ -1,0 +1,90 @@
+/**
+ * @intent 디자인 시스템 토큰(CSS 변수) - 색상, 여백, 타이포그래피, 그림자, Z-Index
+ * @agent  Gemini/manager-develop
+ * @branch feat/mytriplog-core
+ * @author @developer_name
+ * @date   2026-09-29
+ */
+
+:root {
+  /* 주요 브랜드 및 테마 색상 */
+  --primary-50: #eff6ff;
+  --primary-100: #dbeafe;
+  --primary-500: #3b82f6;
+  --primary-600: #2563eb;
+  --primary-700: #1d4ed8;
+
+  --accent-teal: #0d9488;
+  --accent-emerald: #059669;
+  --accent-amber: #d97706;
+  --accent-rose: #e11d48;
+  --accent-purple: #7c3aed;
+  --accent-cyan: #0891b2;
+
+  /* 6대 카테고리 컬러 */
+  --cat-flight: #2563eb;
+  --cat-airport: #0891b2;
+  --cat-hotel: #7c3aed;
+  --cat-attraction: #059669;
+  --cat-dining: #d97706;
+  --cat-transit: #4b5563;
+
+  /* 일차별 테마 컬러 */
+  --day-1: #2563eb;
+  --day-2: #059669;
+  --day-3: #d97706;
+  --day-4: #db2777;
+  --day-5: #7c3aed;
+
+  /* 뉴트럴 그레이 스케일 */
+  --gray-50: #f8fafc;
+  --gray-100: #f1f5f9;
+  --gray-200: #e2e8f0;
+  --gray-300: #cbd5e1;
+  --gray-400: #94a3b8;
+  --gray-500: #64748b;
+  --gray-600: #475569;
+  --gray-700: #334155;
+  --gray-800: #1e293b;
+  --gray-900: #0f172a;
+
+  /* 서피스 및 배경 */
+  --bg-app: #f1f5f9;
+  --bg-surface: #ffffff;
+  --bg-surface-subtle: #f8fafc;
+
+  /* 텍스트 */
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  --text-dim: #94a3b8;
+  --text-inverse: #ffffff;
+
+  /* 테두리 및 라디우스 */
+  --border-subtle: #e2e8f0;
+  --border-focus: #3b82f6;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+
+  /* 그림자 */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.08);
+  --shadow-sheet: 0 -8px 24px -4px rgba(0, 0, 0, 0.15);
+
+  /* 애니메이션 및 전환 */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --transition-slow: 350ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* 레이아웃 계층 (Z-Index) */
+  --z-map: 1;
+  --z-panel: 10;
+  --z-bottomsheet: 20;
+  --z-header: 30;
+  --z-dropdown: 40;
+  --z-modal: 100;
+  --z-lightbox: 150;
+  --z-toast: 200;
+}

@@ -1,0 +1,14 @@
+# --- AI Harness & Skill Isolation (Zero-Pollution) ---
+# Universal AI Governance Constitution (Local SSOT)
+AGENTS.md
+# Harness-specific Configurations (Redirects to AGENTS.md)
+CLAUDE.md
+.cursorrules
+.cursor/
+.gemini/
+.github/
+.aider*
+# Local AI Agent Workspace & Mounted Skills (Managed by pull/push)
+.agents/
+.harness/
+# -----------------------------------------------------

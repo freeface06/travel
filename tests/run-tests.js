@@ -1,0 +1,330 @@
+/**
+ * @intent 정산 엔진, 환율 환산, 스토어 상태 전이 종합 단위 테스트 스크립트
+ * @agent  Gemini/manager-develop
+ * @branch feat/mytriplog-core
+ * @author @developer_name
+ * @date   2026-09-29
+ */
+
+const assert = require('assert');
+const path = require('path');
+
+// 대상 모듈 로드
+const TripExpense = require(path.join(__dirname, '../js/expense.js'));
+const TripStore = require(path.join(__dirname, '../js/store.js'));
+const Icons = require(path.join(__dirname, '../js/icons.js'));
+const TripShare = require(path.join(__dirname, '../js/share.js'));
+
+let totalTests = 0;
+let passedTests = 0;
+let failedTests = 0;
+
+function runTest(testName, testFn) {
+  totalTests++;
+  try {
+    testFn();
+    passedTests++;
+    console.log(`[PASS] ${testName}`);
+  } catch (err) {
+    failedTests++;
+    console.error(`[FAIL] ${testName}`);
+    console.error(`       Error: ${err.message}`);
+  }
+}
+
+console.log('====================================================');
+console.log('   MyTripLog Core Unit Test Suite (Node.js Test Runner)   ');
+console.log('====================================================\n');
+
+// --------------------------------------------------------------------------
+// 1. 환율 환산 엔진 (Currency Conversion Tests)
+// --------------------------------------------------------------------------
+console.log('--- [Suite 1: 환율 환산 엔진 검증] ---');
+
+runTest('1-1. 동일 통화 환산 시 원래 금액 그대로 반환되어야 함', () => {
+  const result = TripExpense.convertCurrency(10000, 'KRW', 'KRW');
+  assert.strictEqual(result, 10000);
+});
+
+runTest('1-2. 0원 또는 음수/NaN 입력 시 0 반환', () => {
+  assert.strictEqual(TripExpense.convertCurrency(0, 'USD', 'KRW'), 0);
+  assert.strictEqual(TripExpense.convertCurrency(null, 'USD', 'KRW'), 0);
+});
+
+runTest('1-3. JPY -> KRW 환산 (1 JPY = 9.2 KRW 기본 환율 적용)', () => {
+  // 1,000엔 * 9.2 = 9,200원
+  const result = TripExpense.convertCurrency(1000, 'JPY', 'KRW');
+  assert.strictEqual(result, 9200);
+});
+
+runTest('1-4. USD -> KRW 환산 (1 USD = 1350 KRW 기본 환율 적용)', () => {
+  // 100달러 * 1350 = 135,000원
+  const result = TripExpense.convertCurrency(100, 'USD', 'KRW');
+  assert.strictEqual(result, 135000);
+});
+
+runTest('1-5. 사용자 커스텀 환율 적용 환산 (EUR = 1500)', () => {
+  const result = TripExpense.convertCurrency(10, 'EUR', 'KRW', { EUR: 1500.0 });
+  assert.strictEqual(result, 15000);
+});
+
+// --------------------------------------------------------------------------
+// 2. 1/N 정산 및 분담금 계산 (Share Distribution Tests)
+// --------------------------------------------------------------------------
+console.log('\n--- [Suite 2: 1/N 분담금 및 잔여 단수 분배 검증] ---');
+
+runTest('2-1. 정밀 균등 분할: 90,000원 3인 분할 시 각 30,000원', () => {
+  const shares = TripExpense.calculateIndividualShares(90000, ['A', 'B', 'C'], 'KRW');
+  assert.strictEqual(shares['A'], 30000);
+  assert.strictEqual(shares['B'], 30000);
+  assert.strictEqual(shares['C'], 30000);
+  assert.strictEqual(shares['A'] + shares['B'] + shares['C'], 90000);
+});
+
+runTest('2-2. 홀수 단수 분할: 100,000원 3인 분할 시 1원 단위 합계 오차 0 보장', () => {
+  // 100,000 / 3 = 33,333원 + 나머지 1원
+  // A: 33,334원, B: 33,333원, C: 33,333원
+  const shares = TripExpense.calculateIndividualShares(100000, ['A', 'B', 'C'], 'KRW');
+  assert.strictEqual(shares['A'], 33334);
+  assert.strictEqual(shares['B'], 33333);
+  assert.strictEqual(shares['C'], 33333);
+  assert.strictEqual(shares['A'] + shares['B'] + shares['C'], 100000);
+});
+
+runTest('2-3. 소수점 통화(USD) 분할: $100.00 3인 분할 시 총합 $100.00 일치', () => {
+  const shares = TripExpense.calculateIndividualShares(100, ['A', 'B', 'C'], 'USD');
+  const sum = Math.round((shares['A'] + shares['B'] + shares['C']) * 100) / 100;
+  assert.strictEqual(sum, 100);
+});
+
+// --------------------------------------------------------------------------
+// 3. 그리디 알고리즘 기반 최소 횟수 1/N 송금 엔진 검증 (Settlement Engine Tests)
+// --------------------------------------------------------------------------
+console.log('\n--- [Suite 3: 최소 횟수 1/N 그리디 송금 엔진 검증] ---');
+
+runTest('3-1. Happy Path: 3인 각자 지출 후 최소 송금 거래 산출', () => {
+  // 민우: 60,000원 결제
+  // 지훈: 30,000원 결제
+  // 서연: 0원 결제
+  // 총 지출: 90,000원 (1인당 분담금: 30,000원)
+  // 민우 순차액: +30,000원 (받을 돈)
+  // 지훈 순차액: 0원
+  // 서연 순차액: -30,000원 (보낼 돈)
+  // 최소 송금: 서연 -> 민우 30,000원 (단 1회의 거래로 정산 완료!)
+  const members = ['민우', '지훈', '서연'];
+  const items = [
+    { cost: 60000, currency: 'KRW', payer: '민우' },
+    { cost: 30000, currency: 'KRW', payer: '지훈' }
+  ];
+
+  const result = TripExpense.calculateSettlements(members, items, 'KRW');
+  assert.strictEqual(result.summary.totalInBase, 90000);
+  assert.strictEqual(result.settlements.length, 1);
+  assert.strictEqual(result.settlements[0].from, '서연');
+  assert.strictEqual(result.settlements[0].to, '민우');
+  assert.strictEqual(result.settlements[0].amount, 30000);
+});
+
+runTest('3-2. 엣지 케이스 1: 총 지출이 0원인 경우 송금 내역 0건', () => {
+  const members = ['민우', '지훈'];
+  const items = [{ cost: 0, currency: 'KRW', payer: '민우' }];
+  const result = TripExpense.calculateSettlements(members, items, 'KRW');
+  assert.strictEqual(result.settlements.length, 0);
+  assert.strictEqual(result.summary.totalInBase, 0);
+});
+
+runTest('3-3. 엣지 케이스 2: 1인 단독 여행인 경우 송금 내역 0건', () => {
+  const members = ['민우'];
+  const items = [{ cost: 50000, currency: 'KRW', payer: '민우' }];
+  const result = TripExpense.calculateSettlements(members, items, 'KRW');
+  assert.strictEqual(result.settlements.length, 0);
+});
+
+runTest('3-4. 엣지 케이스 3: 모든 참가자가 정확히 동일하게 결제한 경우 송금 0건', () => {
+  const members = ['A', 'B'];
+  const items = [
+    { cost: 20000, currency: 'KRW', payer: 'A' },
+    { cost: 20000, currency: 'KRW', payer: 'B' }
+  ];
+  const result = TripExpense.calculateSettlements(members, items, 'KRW');
+  assert.strictEqual(result.settlements.length, 0);
+});
+
+runTest('3-5. 엣지 케이스 4: 1인이 전액 결제한 경우 다자간 송금', () => {
+  // A가 120,000원 전액 결제 (A, B, C, D 4인 여행 -> 1인당 30,000원)
+  // B -> A 30,000 / C -> A 30,000 / D -> A 30,000 (총 3건 송금)
+  const members = ['A', 'B', 'C', 'D'];
+  const items = [{ cost: 120000, currency: 'KRW', payer: 'A' }];
+  const result = TripExpense.calculateSettlements(members, items, 'KRW');
+
+  assert.strictEqual(result.summary.totalInBase, 120000);
+  assert.strictEqual(result.settlements.length, 3);
+  result.settlements.forEach((st) => {
+    assert.strictEqual(st.to, 'A');
+    assert.strictEqual(st.amount, 30000);
+  });
+});
+
+runTest('3-6. 다중 통화 혼합 결제 정산 검증 (KRW + JPY)', () => {
+  // 참가자: [A, B]
+  // A: 10,000 KRW
+  // B: 2,000 JPY (환율 9.2 -> 18,400 KRW)
+  // 총 지출액: 28,400 KRW
+  // 1인당: 14,200 KRW
+  // A 순차액: 10,000 - 14,200 = -4,200 KRW (보낼 돈)
+  // B 순차액: 18,400 - 14,200 = +4,200 KRW (받을 돈)
+  // A -> B : 4,200원 송금
+  const members = ['A', 'B'];
+  const items = [
+    { cost: 10000, currency: 'KRW', payer: 'A' },
+    { cost: 2000, currency: 'JPY', payer: 'B' }
+  ];
+  const result = TripExpense.calculateSettlements(members, items, 'KRW', { JPY: 9.2 });
+  assert.strictEqual(result.summary.totalInBase, 28400);
+  assert.strictEqual(result.settlements.length, 1);
+  assert.strictEqual(result.settlements[0].from, 'A');
+  assert.strictEqual(result.settlements[0].to, 'B');
+  assert.strictEqual(result.settlements[0].amount, 4200);
+});
+
+// --------------------------------------------------------------------------
+// 4. 상태 관리자(Store) 및 데이터 수명주기 검증
+// --------------------------------------------------------------------------
+console.log('\n--- [Suite 4: Store 상태 관리자 및 불변성/옵저버 검증] ---');
+
+runTest('4-1. 기본 여행 데이터 초기화 및 6대 카테고리 완전성 검증', () => {
+  const store = new TripStore.Store();
+  const trip = store.getState().trip;
+
+  assert.ok(trip.metadata.title);
+  assert.ok(Array.isArray(trip.items));
+  assert.ok(trip.items.length >= 6);
+
+  // 6대 카테고리가 모두 기본 일정에 존재하는지 검사
+  const categories = new Set(trip.items.map((it) => it.category));
+  ['FLIGHT', 'AIRPORT', 'HOTEL', 'ATTRACTION', 'DINING', 'TRANSIT'].forEach((cat) => {
+    assert.ok(categories.has(cat), `Category ${cat} must exist in default trip`);
+  });
+});
+
+runTest('4-2. 아이템 추가 (addItem) 및 ID 자동 발급', () => {
+  const store = new TripStore.Store();
+  const initialCount = store.getState().trip.items.length;
+
+  const newItem = store.addItem({
+    title: '도쿄 디즈니씨',
+    category: 'ATTRACTION',
+    day: 3,
+    cost: 89000,
+    currency: 'KRW',
+    payer: '민우'
+  });
+
+  assert.ok(newItem.id);
+  assert.strictEqual(store.getState().trip.items.length, initialCount + 1);
+  assert.strictEqual(newItem.title, '도쿄 디즈니씨');
+});
+
+runTest('4-3. 아이템 수정 (updateItem)', () => {
+  const store = new TripStore.Store();
+  const firstId = store.getState().trip.items[0].id;
+
+  store.updateItem(firstId, {
+    title: '인천 -> 나리타 에어서울 RS701 (수정됨)',
+    cost: 700000
+  });
+
+  const updated = store.getState().trip.items.find((it) => it.id === firstId);
+  assert.strictEqual(updated.title, '인천 -> 나리타 에어서울 RS701 (수정됨)');
+  assert.strictEqual(updated.cost, 700000);
+});
+
+runTest('4-4. 아이템 삭제 (deleteItem)', () => {
+  const store = new TripStore.Store();
+  const firstId = store.getState().trip.items[0].id;
+  const initialCount = store.getState().trip.items.length;
+
+  const deleted = store.deleteItem(firstId);
+  assert.strictEqual(deleted, true);
+  assert.strictEqual(store.getState().trip.items.length, initialCount - 1);
+  assert.strictEqual(store.getState().trip.items.find((it) => it.id === firstId), undefined);
+});
+
+runTest('4-5. 옵저버 구독 및 상태 변경 시 통지 (subscribe/notify)', () => {
+  const store = new TripStore.Store();
+  let callCount = 0;
+  let receivedState = null;
+
+  const unsubscribe = store.subscribe((state) => {
+    callCount++;
+    receivedState = state;
+  });
+
+  store.setSelectedDay(3);
+  assert.strictEqual(callCount, 1);
+  assert.strictEqual(receivedState.selectedDay, 3);
+
+  unsubscribe();
+  store.setSelectedDay(4);
+  assert.strictEqual(callCount, 1); // 구독 취소 후에는 증가하지 않음
+});
+
+// --------------------------------------------------------------------------
+// 5. 무서버 공유 데이터 살균화 검증 (Share Data Sanitization)
+// --------------------------------------------------------------------------
+console.log('\n--- [Suite 5: 무서버 공유 및 직렬화 검증] ---');
+
+runTest('5-1. 공유 데이터 살균 시 photoDataUrl(Base64)이 안전하게 제외되어야 함', () => {
+  const dummyTrip = {
+    metadata: { title: '테스트 여행' },
+    items: [
+      { id: '1', title: '명소 A', photoId: 'photo-1', photoDataUrl: 'data:image/jpeg;base64,AAAAAA...' },
+      { id: '2', title: '식당 B', photoId: null }
+    ]
+  };
+
+  const sanitized = TripShare.sanitizeForSharing(dummyTrip);
+  assert.strictEqual(sanitized.items[0].photoDataUrl, undefined);
+  assert.strictEqual(sanitized.items[0].photoId, 'photo-1');
+  assert.strictEqual(sanitized.items[0].title, '명소 A');
+  // 원본 객체는 오염되지 않음
+  assert.ok(dummyTrip.items[0].photoDataUrl);
+});
+
+// --------------------------------------------------------------------------
+// 6. SVG 아이콘 유효성 검증 (Strict No-Emoji Check)
+// --------------------------------------------------------------------------
+console.log('\n--- [Suite 6: SVG 아이콘 및 엄격한 No-Emoji 검증] ---');
+
+runTest('6-1. 6대 카테고리 SVG 아이콘 정상 생성', () => {
+  ['FLIGHT', 'AIRPORT', 'HOTEL', 'ATTRACTION', 'DINING', 'TRANSIT'].forEach((key) => {
+    const svg = Icons.getIcon(key);
+    assert.ok(svg.startsWith('<svg'));
+    assert.ok(svg.endsWith('</svg>'));
+    assert.ok(svg.includes('xmlns="http://www.w3.org/2000/svg"'));
+  });
+});
+
+runTest('6-2. 아이콘 모듈에 유니코드 이모지가 전혀 포함되지 않음', () => {
+  const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u;
+  Object.keys(Icons.SVG_DEFS).forEach((key) => {
+    assert.strictEqual(emojiRegex.test(Icons.SVG_DEFS[key]), false, `Emoji found in icon ${key}`);
+  });
+});
+
+// --------------------------------------------------------------------------
+// 결과 종합 요약
+// --------------------------------------------------------------------------
+console.log('\n====================================================');
+console.log(`[TEST SUMMARY]`);
+console.log(`Total Tests : ${totalTests}`);
+console.log(`Passed      : ${passedTests}`);
+console.log(`Failed      : ${failedTests}`);
+console.log('====================================================');
+
+if (failedTests > 0) {
+  process.exit(1);
+} else {
+  console.log('[V] All unit tests completed successfully!');
+  process.exit(0);
+}
