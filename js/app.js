@@ -23,9 +23,6 @@
     tripTitle: document.getElementById('trip-title'),
     tripPeriod: document.getElementById('trip-period'),
     btnEditTrip: document.getElementById('btn-edit-trip'),
-    btnExportJson: document.getElementById('btn-export-json'),
-    btnImportJson: document.getElementById('btn-import-json'),
-    fileInputImport: document.getElementById('file-input-import'),
 
     // 내비게이션 탭
     tabTimeline: document.getElementById('tab-timeline'),
@@ -621,24 +618,6 @@
             <button type="button" id="btn-copy-share-url" class="btn btn-primary btn-sm">복사</button>
           </div>
         </div>
-
-        <div class="stat-card">
-          <div style="font-size:0.95rem; font-weight:700; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
-            ${getIcon('DOWNLOAD', { size: 18, color: 'var(--accent-teal)' })}
-            <span>데이터 백업 및 복원 (JSON)</span>
-          </div>
-          <p style="font-size:0.8rem; color:var(--text-muted); line-height:1.4; margin-bottom:12px;">
-            작성된 여행 일정과 첨부된 모든 고화질 사진을 포함한 단일 JSON 백업 파일을 내보내거나 불러옵니다.
-          </p>
-          <div style="display:flex; gap:10px;">
-            <button type="button" id="btn-panel-export-json" class="btn btn-secondary btn-sm">
-              ${getIcon('DOWNLOAD', { size: 14 })} <span>JSON 내보내기</span>
-            </button>
-            <button type="button" id="btn-panel-import-json" class="btn btn-outline btn-sm">
-              ${getIcon('UPLOAD', { size: 14 })} <span>JSON 가져오기</span>
-            </button>
-          </div>
-        </div>
       </div>
     `;
 
@@ -652,15 +631,6 @@
       } else {
         showToast('복사에 실패했습니다. URL을 직접 복사해 주세요.');
       }
-    });
-
-    document.getElementById('btn-panel-export-json')?.addEventListener('click', () => {
-      exportTripAsJson(trip);
-      showToast('백업 파일 저장이 시작되었습니다.');
-    });
-
-    document.getElementById('btn-panel-import-json')?.addEventListener('click', () => {
-      dom.fileInputImport.click();
     });
   }
 
@@ -1091,30 +1061,6 @@
 
     // 13. 상단 헤더 액션 버튼
     dom.btnEditTrip?.addEventListener('click', openTripMetaModal);
-
-    dom.btnExportJson?.addEventListener('click', () => {
-      exportTripAsJson(store.getState().trip);
-      showToast('여행 데이터 JSON 파일 다운로드가 시작되었습니다.');
-    });
-
-    dom.btnImportJson?.addEventListener('click', () => {
-      dom.fileInputImport.click();
-    });
-
-    dom.fileInputImport?.addEventListener('change', async (e) => {
-      const file = e.target.files && e.target.files[0];
-      if (!file) return;
-
-      try {
-        const importedData = await importTripFromJsonFile(file);
-        store.replaceTrip(importedData);
-        showToast('여행 데이터를 성공적으로 가져왔습니다!');
-      } catch (err) {
-        alert('가져오기 실패: ' + err.message);
-      } finally {
-        dom.fileInputImport.value = '';
-      }
-    });
 
     // 14. 중앙 상태(Store) 변경 감지 구독
     store.subscribe((state) => {

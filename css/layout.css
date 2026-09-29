@@ -656,7 +656,7 @@
 
   .brand-title {
     font-size: 0.95rem;
-    max-width: 140px;
+    max-width: calc(100vw - 110px);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -664,7 +664,7 @@
 
   .brand-period {
     font-size: 0.68rem;
-    max-width: 140px;
+    max-width: calc(100vw - 110px);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -717,12 +717,12 @@
   }
 
   .brand-title {
-    max-width: 110px;
+    max-width: calc(100vw - 90px);
     font-size: 0.88rem;
   }
 
   .brand-period {
-    max-width: 110px;
+    max-width: calc(100vw - 90px);
     font-size: 0.65rem;
   }
 
