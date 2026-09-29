@@ -78,15 +78,15 @@
   --transition-normal: 250ms ease;
   --transition-slow: 350ms cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* 레이아웃 계층 (Z-Index) - 바텀시트 및 내비게이션 위로 모달 최상단 노출 보장 */
+  /* 레이아웃 계층 (Z-Index) - 상단 헤더 및 드롭다운이 바텀시트/Day칩보다 상위에 위치하도록 정렬 */
   --z-map: 1;
   --z-map-controls: 500;
   --z-panel: 1000;
-  --z-header: 2000;
   --z-day-chips: 2100;
   --z-bottomsheet: 8000;
-  --z-bottom-nav: 9000;
-  --z-dropdown: 9500;
+  --z-bottom-nav: 8500;
+  --z-header: 9200; /* 상단 헤더가 바텀시트(8000) 및 Day 칩(2100)보다 항상 최상위에 위치 */
+  --z-dropdown: 9500; /* 헤더 드롭다운 메뉴 */
   --z-modal: 10000;
   --z-lightbox: 11000;
   --z-toast: 12000;

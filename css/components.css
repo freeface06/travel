@@ -2994,11 +2994,11 @@
   right: 0;
   min-width: 220px;
   background: #ffffff;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 14px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08);
   padding: 6px;
-  z-index: 1000;
+  z-index: var(--z-dropdown, 9500);
   animation: dropdownFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 

@@ -28,7 +28,8 @@
   padding: 0 20px;
   background-color: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
-  z-index: var(--z-header);
+  position: relative;
+  z-index: var(--z-header, 9200);
   flex-shrink: 0;
 }
 
@@ -130,6 +131,7 @@
   gap: 8px;
   flex-shrink: 0;
   position: relative;
+  z-index: var(--z-dropdown, 9500);
 }
 
 /* 헤더 액션 버튼 (데스크톱 컴팩트 캡슐 / 모바일 원형 아이콘) */
@@ -238,7 +240,8 @@
   -ms-overflow-style: none;
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
-  z-index: 90;
+  position: relative;
+  z-index: var(--z-day-chips, 2100);
 }
 
 .day-chip-slider-wrapper::-webkit-scrollbar {
@@ -389,7 +392,7 @@
   /* 상단 Day 칩 슬라이더 모바일 특화 스타일 */
   .day-chip-slider-wrapper {
     position: relative;
-    z-index: 8000 !important;
+    z-index: var(--z-day-chips, 2100);
     padding: 6px 12px;
     background-color: rgba(255, 255, 255, 0.98);
     backdrop-filter: blur(8px);
