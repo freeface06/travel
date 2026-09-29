@@ -97,6 +97,90 @@
   }
 
   /**
+   * 모바일 바텀시트 터치 스와이프 제스처 엔진 초기화
+   */
+  function initBottomSheetTouchGesture() {
+    if (!dom.bottomSheetHandle) return;
+
+    let touchStartY = 0;
+    let initialHeight = 0;
+    let isDragging = false;
+    let dragDistance = 0;
+
+    dom.bottomSheetHandle.addEventListener('touchstart', (e) => {
+      if (window.innerWidth > 900) return;
+      const touch = e.touches[0];
+      touchStartY = touch.clientY;
+      initialHeight = dom.sidePanel.getBoundingClientRect().height;
+      isDragging = true;
+      dragDistance = 0;
+      dom.sidePanel.classList.add('is-dragging');
+    }, { passive: true });
+
+    window.addEventListener('touchmove', (e) => {
+      if (!isDragging || window.innerWidth > 900) return;
+      const currentY = e.touches[0].clientY;
+      dragDistance = touchStartY - currentY; // 위로 올리면 양수, 아래로 내리면 음수
+
+      const windowH = window.innerHeight;
+      const minH = 70;
+      const maxH = windowH - 54;
+      const calculatedHeight = Math.max(minH, Math.min(maxH, initialHeight + dragDistance));
+
+      dom.sidePanel.style.height = `${calculatedHeight}px`;
+    }, { passive: true });
+
+    window.addEventListener('touchend', () => {
+      if (!isDragging || window.innerWidth > 900) return;
+      isDragging = false;
+      dom.sidePanel.classList.remove('is-dragging');
+      dom.sidePanel.style.height = ''; // 인라인 스타일 제거
+
+      const windowH = window.innerHeight;
+
+      // 미세한 탭인 경우 (이동거리 8px 미만) -> 단계 순환
+      if (Math.abs(dragDistance) < 8) {
+        cycleBottomSheetState();
+        return;
+      }
+
+      // 빠른 위로 스와이프 (위로 50px 이상 이동)
+      if (dragDistance > 60) {
+        if (currentSheetState === 'peek') setBottomSheetState('half');
+        else setBottomSheetState('full');
+        return;
+      }
+
+      // 빠른 아래로 스와이프 (아래로 50px 이상 이동)
+      if (dragDistance < -60) {
+        if (currentSheetState === 'full') setBottomSheetState('half');
+        else setBottomSheetState('peek');
+        return;
+      }
+
+      // 위치 기반 가장 가까운 스냅 지점 계산
+      const finalH = initialHeight + dragDistance;
+      const ratio = finalH / windowH;
+
+      if (ratio > 0.65) {
+        setBottomSheetState('full');
+      } else if (ratio < 0.25) {
+        setBottomSheetState('peek');
+      } else {
+        setBottomSheetState('half');
+      }
+    });
+
+    // 데스크톱 또는 마우스 클릭 시 순환
+    dom.bottomSheetHandle.addEventListener('click', (e) => {
+      if (Math.abs(dragDistance) < 5) {
+        cycleBottomSheetState();
+      }
+    });
+  }
+
+
+  /**
    * 전체 여행 일정에서 사용 중인 최대 Day 계산
    */
   function getMaxDays(items = []) {
@@ -861,8 +945,22 @@
       }
     });
 
-    // 9. 모바일 바텀시트 핸들 클릭/터치
-    dom.bottomSheetHandle?.addEventListener('click', cycleBottomSheetState);
+    // 9. 모바일 바텀시트 터치 스와이프 제스처 엔진 가동
+    initBottomSheetTouchGesture();
+
+    // 10. 반응형 뷰포트 변경 및 기기 회전(Orientation) 시 지도 렌더링 무결성 보장
+    let resizeDebounceTimer = null;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeDebounceTimer);
+      resizeDebounceTimer = setTimeout(() => {
+        mapManager.invalidateSize();
+      }, 120);
+    });
+
+    window.addEventListener('orientationchange', () => {
+      setTimeout(() => mapManager.invalidateSize(), 300);
+    });
+
 
     // 10. 상단 헤더 액션 버튼
     dom.btnEditTrip?.addEventListener('click', openTripMetaModal);

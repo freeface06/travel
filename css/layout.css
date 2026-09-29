@@ -11,10 +11,13 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: var(--app-height, 100dvh);
+  min-height: -webkit-fill-available;
   width: 100vw;
   overflow: hidden;
   background-color: var(--bg-app);
 }
+
 
 /* 상단 메인 헤더 */
 .app-header {
@@ -220,12 +223,21 @@
 }
 
 /* ==========================================================================
-   모바일 반응형 레이아웃 및 3단계 바텀시트
+   반응형 레이아웃 및 3단계 바텀시트 (Desktop / Tablet / Mobile)
    ========================================================================== */
 .bottom-sheet-handle {
   display: none;
 }
 
+/* 태블릿 가로 (901px ~ 1150px) */
+@media (min-width: 901px) and (max-width: 1150px) {
+  .side-panel {
+    width: 440px;
+    max-width: 45vw;
+  }
+}
+
+/* 모바일 및 태블릿 세로 (900px 이하) */
 @media (max-width: 900px) {
   .app-body {
     flex-direction: column;
@@ -252,6 +264,12 @@
     z-index: var(--z-bottomsheet);
     transition: height var(--transition-slow), transform var(--transition-slow);
     will-change: height, transform;
+    padding-bottom: var(--safe-area-bottom);
+  }
+
+  /* 손가락 터치 드래그 중 transition 해제 */
+  .side-panel.is-dragging {
+    transition: none !important;
   }
 
   /* 3단계 바텀시트 상태 */
@@ -261,31 +279,131 @@
 
   .side-panel.sheet-half {
     height: 50vh !important;
+    height: 50dvh !important;
   }
 
   .side-panel.sheet-full {
-    height: 90vh !important;
+    height: calc(100vh - 60px) !important;
+    height: calc(100dvh - 60px) !important;
   }
 
-  /* 드래그 핸들 노출 */
+  /* 드래그 핸들 노출 및 터치 액션 격리 */
   .bottom-sheet-handle {
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 24px;
+    height: 28px;
     width: 100%;
     cursor: grab;
     flex-shrink: 0;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  .bottom-sheet-handle:active {
+    cursor: grabbing;
   }
 
   .bottom-sheet-handle-bar {
-    width: 44px;
-    height: 4px;
+    width: 48px;
+    height: 5px;
     background-color: var(--gray-300);
     border-radius: var(--radius-full);
+    transition: background-color var(--transition-fast);
+  }
+
+  .bottom-sheet-handle:hover .bottom-sheet-handle-bar {
+    background-color: var(--gray-400);
   }
 
   .panel-content-area {
     padding: 12px;
   }
+
+  /* 지도 플로팅 버튼 모바일 위치 */
+  .map-floating-controls {
+    top: 12px;
+    right: 12px;
+  }
+
+  .btn-floating {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+  }
 }
+
+/* 모바일 폰 뷰포트 (640px 이하) */
+@media (max-width: 640px) {
+  .app-header {
+    height: 54px;
+    padding: 0 12px;
+  }
+
+  .brand-logo-badge {
+    width: 32px;
+    height: 32px;
+  }
+
+  .brand-logo-badge svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .brand-title {
+    font-size: 0.95rem;
+    max-width: 150px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* 헤더 버튼: 모바일에서 텍스트 숨김 및 컴팩트 아이콘 모드 */
+  .header-actions .btn span {
+    display: none;
+  }
+
+  .header-actions .btn {
+    padding: 7px 10px;
+  }
+
+  .header-actions {
+    gap: 6px;
+  }
+
+  .panel-nav-btn {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    gap: 4px;
+  }
+
+  .day-chip {
+    padding: 5px 10px;
+    font-size: 0.75rem;
+  }
+}
+
+/* 초소형 모바일 (380px 이하) */
+@media (max-width: 380px) {
+  .app-header {
+    padding: 0 8px;
+  }
+
+  .header-brand {
+    gap: 8px;
+  }
+
+  .brand-title {
+    max-width: 120px;
+  }
+
+  .panel-nav-tabs {
+    padding: 3px 4px;
+  }
+
+  .panel-nav-btn {
+    padding: 6px 6px;
+    font-size: 0.75rem;
+  }
+}
+

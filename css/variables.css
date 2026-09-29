@@ -87,4 +87,10 @@
   --z-modal: 100;
   --z-lightbox: 150;
   --z-toast: 200;
+
+  /* 반응형 및 SafeArea 토큰 */
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --app-height: 100dvh;
 }
+

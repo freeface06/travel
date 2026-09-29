@@ -675,3 +675,92 @@
   opacity: 1;
   transform: translateY(0);
 }
+
+/* ==========================================================================
+   컴포넌트 모바일 반응형 미디어 쿼리 (640px 이하)
+   ========================================================================== */
+@media (max-width: 640px) {
+  /* 폼 그리드: 좌우 분할을 1열 세로 스택으로 변환하여 좁은 화면 텍스트 짤림 방지 */
+  .form-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  /* 모달 다이얼로그: 모바일 바텀 모달 시트 스타일로 전환 */
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal-dialog {
+    max-width: 100%;
+    border-radius: 20px 20px 0 0;
+    max-height: 88vh;
+    max-height: 88dvh;
+    margin: 0;
+  }
+
+  .modal-header {
+    padding: 14px 16px;
+  }
+
+  .modal-body {
+    padding: 14px 16px;
+  }
+
+  .category-pill-group {
+    gap: 6px;
+  }
+
+  .category-pill {
+    padding: 5px 10px;
+    font-size: 0.75rem;
+  }
+
+  /* 타임라인 카드 패딩 및 폰트 축소 */
+  .timeline-item-card {
+    padding: 12px 14px;
+    gap: 6px;
+  }
+
+  .card-main-title {
+    font-size: 0.9rem;
+  }
+
+  /* 경비 서머리 그리드 모바일 2열 전환 */
+  .expense-summary-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .summary-card {
+    padding: 12px;
+  }
+
+  .summary-val {
+    font-size: 1.1rem;
+  }
+
+  /* 정산 송금 카드 */
+  .settlement-card {
+    padding: 12px 14px;
+  }
+
+  .settlement-transfer-route {
+    font-size: 0.85rem;
+  }
+
+  /* 토스트 모바일 위치 */
+  .toast-container {
+    bottom: 90px;
+    width: 90%;
+    max-width: 320px;
+  }
+
+  .toast-msg {
+    text-align: center;
+    font-size: 0.8rem;
+    padding: 8px 14px;
+  }
+}
+
