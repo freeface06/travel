@@ -577,48 +577,6 @@
     line-height: 1;
   }
 
-  /* 중앙 강조 FAB 버튼 */
-  .m-nav-fab {
-    position: relative;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-end;
-    padding-bottom: 6px;
-    overflow: visible;
-  }
-
-  .m-nav-fab-btn {
-    position: absolute;
-    top: -16px;
-    width: 48px;
-    height: 48px;
-    border-radius: var(--radius-full);
-    background: linear-gradient(135deg, var(--primary-600), var(--primary-700));
-    color: #ffffff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.42);
-    border: 3px solid #ffffff;
-    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
-  }
-
-  .m-nav-fab-btn svg {
-    width: 26px;
-    height: 26px;
-  }
-
-  .m-nav-fab:active .m-nav-fab-btn {
-    transform: scale(0.90);
-    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
-  }
-
-  .m-nav-fab .m-nav-label {
-    color: var(--primary-700);
-    font-weight: 700;
-  }
 
   .panel-content-area {
     padding: 12px;

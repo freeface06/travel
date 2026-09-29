@@ -72,7 +72,7 @@
    */
   function syncMobileNavActiveState(targetName) {
     if (!dom.mobileBottomNav) return;
-    const items = dom.mobileBottomNav.querySelectorAll('.m-nav-item:not(.m-nav-fab)');
+    const items = dom.mobileBottomNav.querySelectorAll('.m-nav-item[data-target]');
     items.forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.target === targetName);
     });
