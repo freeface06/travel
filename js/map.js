@@ -80,19 +80,35 @@
       }
     }
 
-    isGoogleMapsConfigured() {
-      if (typeof window === 'undefined') return false;
-      const scriptTag = document.querySelector('script[src*="maps.googleapis.com"]');
-      if (!scriptTag || scriptTag.src.includes('key=YOUR_GOOGLE_MAPS_API_KEY')) {
-        return false;
-      }
-      return Boolean(window.google && window.google.maps && window.google.maps.Map);
+    isGoogleMapsReady() {
+      return Boolean(typeof window !== 'undefined' && window.google && window.google.maps && window.google.maps.Map);
     }
 
     /**
-     * 지도 초기화 (하이브리드: 구글 맵 가용 시 구글 맵, 미가용 시 Leaflet)
+     * Google Maps JavaScript API 동적 주입 및 로드
      */
-    init(containerId = 'map-container', initialCenter = [35.6895, 139.6917], initialZoom = 12) {
+    loadGoogleScript(apiKey) {
+      return new Promise((resolve, reject) => {
+        if (this.isGoogleMapsReady()) return resolve();
+        if (typeof document === 'undefined') return reject(new Error('Document not ready'));
+
+        const existing = document.querySelector('script[src*="maps.googleapis.com"]');
+        if (existing) existing.remove();
+
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey.trim())}&libraries=places&language=ko&region=KR`;
+        script.async = true;
+        script.defer = true;
+        script.onload = () => resolve();
+        script.onerror = (err) => reject(err);
+        document.head.appendChild(script);
+      });
+    }
+
+    /**
+     * 지도 초기화 (저장된 API 키 확인 후 Google Maps 우선 로드, 미설정 시 Leaflet 폴백)
+     */
+    async init(containerId = 'map-container', initialCenter = [35.6895, 139.6917], initialZoom = 12) {
       this.containerId = containerId;
       this.currentCenter = initialCenter;
       this.currentZoom = initialZoom;
@@ -101,30 +117,57 @@
       const container = document.getElementById(containerId);
       if (!container) return;
 
-      // 1. Google Maps 사용 가능한지 확인
-      if (this.isGoogleMapsConfigured()) {
-        this.initGoogleMaps(container, initialCenter, initialZoom);
-        return;
+      const savedKey = typeof localStorage !== 'undefined' ? (localStorage.getItem('mytriplog_gmaps_api_key') || '').trim() : '';
+
+      // 1. 저장된 Google Maps API 키가 있으면 동적 로드 후 Google Maps로 초기화
+      if (savedKey) {
+        try {
+          await this.loadGoogleScript(savedKey);
+          if (this.isGoogleMapsReady()) {
+            this.initGoogleMaps(container, initialCenter, initialZoom);
+            return;
+          }
+        } catch (err) {
+          console.warn('Google Maps load failed with saved key. Falling back to Leaflet:', err);
+        }
       }
 
-      // 2. Leaflet 사용 가능한지 확인 (무오류 자동 폴백)
+      // 2. 키가 없거나 로드 실패 시 Leaflet(OpenStreetMap)으로 안정 초기화
       if (typeof L !== 'undefined') {
         this.initLeaflet(container, initialCenter, initialZoom);
-        return;
+      }
+    }
+
+    /**
+     * 사용자가 API 키를 새로 입력/수정했을 때 즉시 엔진 전환
+     */
+    async updateApiKey(newKey) {
+      const key = (newKey || '').trim();
+      if (typeof localStorage !== 'undefined') {
+        if (key) localStorage.setItem('mytriplog_gmaps_api_key', key);
+        else localStorage.removeItem('mytriplog_gmaps_api_key');
       }
 
-      // Google Maps 비동기 로드 대기 (최대 1.5초)
-      let waitTimer = setInterval(() => {
-        if (this.isGoogleMapsConfigured()) {
-          clearInterval(waitTimer);
-          this.initGoogleMaps(container, initialCenter, initialZoom);
-        } else if (typeof L !== 'undefined') {
-          clearInterval(waitTimer);
-          this.initLeaflet(container, initialCenter, initialZoom);
-        }
-      }, 150);
+      const container = document.getElementById(this.containerId);
+      if (!container) return false;
 
-      setTimeout(() => clearInterval(waitTimer), 2000);
+      if (key) {
+        try {
+          await this.loadGoogleScript(key);
+          if (this.isGoogleMapsReady()) {
+            this.initGoogleMaps(container, this.currentCenter, this.currentZoom);
+            return true;
+          }
+        } catch (err) {
+          console.error('Failed to switch to Google Maps:', err);
+        }
+      } else {
+        if (typeof L !== 'undefined') {
+          this.initLeaflet(container, this.currentCenter, this.currentZoom);
+          return true;
+        }
+      }
+      return false;
     }
 
     /**
@@ -135,6 +178,12 @@
       this.setApiKeyBannerVisible(false);
 
       try {
+        // 기존 Leaflet 인스턴스가 있다면 정리
+        if (this.map && typeof this.map.remove === 'function') {
+          this.map.remove();
+          this.map = null;
+        }
+
         const centerLatLng = { lat: initialCenter[0], lng: initialCenter[1] };
         this.map = new google.maps.Map(container, {
           center: centerLatLng,
@@ -160,6 +209,13 @@
             if (this.onPinDropListener) this.onPinDropListener(lat, lng);
           }
         });
+
+        // 비동기 대기 중 보관된 렌더링 즉시 실행
+        if (this.pendingRender) {
+          const { items, dayNumber, selectedItemId } = this.pendingRender;
+          this.pendingRender = null;
+          this.render(items, dayNumber, selectedItemId);
+        }
       } catch (err) {
         console.warn('Google Maps init failed, switching to Leaflet fallback:', err);
         if (typeof L !== 'undefined') {
@@ -199,6 +255,12 @@
           this.setPinDropPreview(lat, lng);
           if (this.onPinDropListener) this.onPinDropListener(lat, lng);
         });
+
+        if (this.pendingRender) {
+          const { items, dayNumber, selectedItemId } = this.pendingRender;
+          this.pendingRender = null;
+          this.render(items, dayNumber, selectedItemId);
+        }
       } catch (err) {
         console.error('Leaflet init failed:', err);
       }
@@ -442,11 +504,25 @@
     }
   }
 
+  function getSavedGoogleApiKey() {
+    if (typeof localStorage === 'undefined') return '';
+    return (localStorage.getItem('mytriplog_gmaps_api_key') || '').trim();
+  }
+
+  function saveGoogleApiKey(key) {
+    if (typeof localStorage === 'undefined') return;
+    const clean = (key || '').trim();
+    if (clean) localStorage.setItem('mytriplog_gmaps_api_key', clean);
+    else localStorage.removeItem('mytriplog_gmaps_api_key');
+  }
+
   const mapManager = new TripMapManager();
   return {
     TripMapManager,
     mapManager,
     DAY_COLORS,
-    getDayColor
+    getDayColor,
+    getSavedGoogleApiKey,
+    saveGoogleApiKey
   };
 });

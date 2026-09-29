@@ -24,17 +24,15 @@
   -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&libraries=places&language=ko&region=KR" async defer></script>
-
 
   <!-- LZ-String CDN (무서버 압축 공유) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js" crossorigin=""></script>
 
-  <!-- 스타일시트 -->
-  <link rel="stylesheet" href="css/reset.css" />
-  <link rel="stylesheet" href="css/variables.css" />
-  <link rel="stylesheet" href="css/layout.css" />
-  <link rel="stylesheet" href="css/components.css" />
+  <!-- 스타일시트 (캐시 버스팅 적용) -->
+  <link rel="stylesheet" href="css/reset.css?v=20260929_1445" />
+  <link rel="stylesheet" href="css/variables.css?v=20260929_1445" />
+  <link rel="stylesheet" href="css/layout.css?v=20260929_1445" />
+  <link rel="stylesheet" href="css/components.css?v=20260929_1445" />
 </head>
 <body>
   <div class="app-container">
@@ -244,15 +242,15 @@
   <!-- 토스트 알림 컨테이너 -->
   <div class="toast-container" id="toast-container"></div>
 
-  <!-- 스크립트 모듈 로드 -->
-  <script src="js/icons.js"></script>
-  <script src="js/db.js"></script>
-  <script src="js/expense.js"></script>
-  <script src="js/store.js"></script>
-  <script src="js/geocoder.js"></script>
-  <script src="js/map.js"></script>
-  <script src="js/forms.js"></script>
-  <script src="js/share.js"></script>
-  <script src="js/app.js"></script>
+  <!-- 스크립트 모듈 로드 (캐시 버스팅 적용) -->
+  <script src="js/icons.js?v=20260929_1445"></script>
+  <script src="js/db.js?v=20260929_1445"></script>
+  <script src="js/expense.js?v=20260929_1445"></script>
+  <script src="js/store.js?v=20260929_1445"></script>
+  <script src="js/geocoder.js?v=20260929_1445"></script>
+  <script src="js/map.js?v=20260929_1445"></script>
+  <script src="js/forms.js?v=20260929_1445"></script>
+  <script src="js/share.js?v=20260929_1445"></script>
+  <script src="js/app.js?v=20260929_1445"></script>
 </body>
 </html>

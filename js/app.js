@@ -863,6 +863,15 @@
             <option value="EUR"${(meta.baseCurrency || '') === 'EUR' ? ' selected' : ''}>EUR (유럽 유로)</option>
           </select>
         </div>
+        <div class="form-group">
+          <label class="form-label" for="meta-gmaps-key">Google Maps API 키</label>
+          <input type="text" id="meta-gmaps-key" name="gmapsKey" class="form-control" 
+                 placeholder="AIzaSy... (입력 시 고화질 구글 지도로 즉시 전환)" 
+                 value="${escapeHtml(TripMap.getSavedGoogleApiKey() || '')}" />
+          <span style="font-size:0.72rem; color:var(--text-muted); margin-top:3px; display:block;">
+            Google Cloud에서 발급받은 API 키를 입력하시면 브라우저에 안전하게 저장되고 Google Maps로 즉시 전환됩니다.
+          </span>
+        </div>
         <div class="modal-form-actions">
           <button type="button" id="btn-meta-cancel" class="btn btn-secondary">취소</button>
           <button type="submit" class="btn btn-primary">
@@ -882,6 +891,7 @@
       const startDate = form.startDate.value;
       const endDate = form.endDate.value;
       const baseCurrency = form.baseCurrency.value;
+      const gmapsKey = (form.gmapsKey ? form.gmapsKey.value : '').trim();
 
       store.updateMetadata({
         title,
@@ -890,6 +900,15 @@
         participants: ['신랑', '신부'],
         baseCurrency
       });
+
+      const currentKey = TripMap.getSavedGoogleApiKey();
+      if (gmapsKey !== currentKey) {
+        mapManager.updateApiKey(gmapsKey).then((success) => {
+          if (success) {
+            showToast('Google Maps로 전환되었습니다.');
+          }
+        });
+      }
 
       showToast('여행 기본 정보가 수정되었습니다.');
       closeModal();
