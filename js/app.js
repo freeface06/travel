@@ -2140,30 +2140,32 @@
    * @author @developer_name
    * @date   2026-09-29
    * @param {object} trip 
-   * @returns {Array<{day: number, text: string}>} 일자별 요약 배열
+   * @returns {Array<{day: number, text: string, places: string[], moreCount: number}>} 일자별 요약 배열
    */
   function getTripDaySummaries(trip) {
     const items = (trip && Array.isArray(trip.items)) ? trip.items : [];
     if (items.length === 0) {
-      return [{ day: 1, text: '등록된 일정 없음' }];
+      return [{ day: 1, text: '등록된 일정 없음', places: [], moreCount: 0 }];
     }
     const maxDay = Math.max(1, ...items.map((it) => Number(it.day) || 1));
     const summaries = [];
     for (let d = 1; d <= maxDay; d++) {
       const dayItems = items.filter((it) => (Number(it.day) || 1) === d);
       if (dayItems.length === 0) {
-        summaries.push({ day: d, text: '일정 없음' });
+        summaries.push({ day: d, text: '일정 없음', places: [], moreCount: 0 });
       } else {
-        const titles = dayItems.slice(0, 3).map((it) => it.title || '일정').join(', ');
-        const more = dayItems.length > 3 ? ` 외 ${dayItems.length - 3}건` : '';
-        summaries.push({ day: d, text: `${titles}${more}` });
+        const placeNames = dayItems.map((it) => it.title || '일정');
+        const displayPlaces = placeNames.slice(0, 3);
+        const moreCount = placeNames.length > 3 ? placeNames.length - 3 : 0;
+        const text = displayPlaces.join(' -> ') + (moreCount > 0 ? ` 외 ${moreCount}건` : '');
+        summaries.push({ day: d, text, places: displayPlaces, moreCount });
       }
     }
     return summaries;
   }
 
   /**
-   * @intent 복수 여행 계획 관리 및 비교 모달 팝업 열기
+   * @intent 복수 여행 계획 관리 및 비교 모달 팝업 열기 (iOS 세그먼트 컨트롤, 4대 지표 칩, 비교 히어로 및 동선 타임라인 UX)
    * @agent  Gemini/manager-develop
    * @branch feat/mytriplog-core
    * @author @developer_name
@@ -2179,7 +2181,7 @@
         <div class="trip-modal-tabs" role="tablist">
           <button type="button" class="trip-modal-tab-btn${activeTab === 'list' ? ' active' : ''}" data-tab="list" role="tab">
             ${getIcon('FOLDER', { size: 16 })}
-            <span>계획 목록 (${trips.length})</span>
+            <span>계획 목록 (${trips.length}개)</span>
           </button>
           <button type="button" class="trip-modal-tab-btn${activeTab === 'compare' ? ' active' : ''}" data-tab="compare" role="tab">
             ${getIcon('COMPARE', { size: 16 })}
@@ -2190,15 +2192,15 @@
 
       if (activeTab === 'list') {
         html += `
-          <div class="trip-manager-toolbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-            <span class="trip-manager-count">총 ${trips.length}개의 여행 계획이 보관되어 있습니다.</span>
-            <div style="display:flex; align-items:center; gap:8px;">
-              <button type="button" id="btn-clear-current-trip" class="btn btn-outline btn-sm" style="color:var(--danger, #ef4444); border-color:var(--danger, #ef4444);" title="현재 활성 여행의 모든 일정을 비웁니다">
+          <div class="trip-manager-toolbar">
+            <span class="trip-manager-count">총 ${trips.length}개의 여행 계획 보관 중</span>
+            <div class="trip-manager-actions">
+              <button type="button" id="btn-clear-current-trip" class="btn btn-outline btn-sm btn-clear-trip-outline" title="현재 활성 여행의 모든 일정을 비웁니다">
                 ${getIcon('DELETE', { size: 14 })}
                 <span>현재 일정 비우기</span>
               </button>
-              <button type="button" id="btn-open-create-trip" class="btn-create-trip">
-                ${getIcon('PLUS', { size: 16 })}
+              <button type="button" id="btn-open-create-trip" class="btn btn-primary btn-sm btn-create-trip">
+                ${getIcon('PLUS', { size: 15 })}
                 <span>새 여행 계획 만들기</span>
               </button>
             </div>
@@ -2210,51 +2212,102 @@
           const isSelected = trip.metadata && trip.metadata.id === currentTripId;
           const totalCost = calculateTripTotalExpense(trip);
           const baseCurrency = (trip.metadata && trip.metadata.baseCurrency) || 'KRW';
-          const durationText = getTripDurationText(trip.metadata && trip.metadata.startDate, trip.metadata && trip.metadata.endDate);
+          const startDate = trip.metadata && trip.metadata.startDate;
+          const endDate = trip.metadata && trip.metadata.endDate;
+          const hasValidDates = Boolean(startDate && endDate);
+          const durationText = getTripDurationText(startDate, endDate);
           const itemCount = (trip.items || []).length;
           const tripId = (trip.metadata && trip.metadata.id) || '';
+          const tripTitle = (trip.metadata && trip.metadata.title) || '새로운 여행 계획';
+          const rawParticipants = (trip.metadata && trip.metadata.participants) || [];
+          const participants = Array.isArray(rawParticipants) ? rawParticipants.filter(Boolean) : [];
+          const participantCount = Math.max(1, participants.length);
+          const perPersonCost = Math.round(totalCost / participantCount);
+          const participantsText = participants.length > 0
+            ? `${participants.join(', ')} (${participants.length}명)`
+            : '인원 미지정 (1명)';
 
           html += `
             <div class="trip-plan-card${isSelected ? ' is-selected' : ''}" data-id="${escapeHtml(tripId)}">
               <div class="trip-card-header">
                 <div class="trip-card-title-wrap">
-                  <div class="trip-card-title">${escapeHtml((trip.metadata && trip.metadata.title) || '새로운 여행 계획')}</div>
+                  <h3 class="trip-card-title">${escapeHtml(tripTitle)}</h3>
+                  ${hasValidDates ? `<span class="badge-trip-status badge-confirmed">일정 확정</span>` : `<span class="badge-trip-status badge-unconfirmed">기간 미정</span>`}
                 </div>
-                ${isSelected ? `<span class="badge-selected">[선택됨]</span>` : ''}
+                ${isSelected ? `<span class="badge-selected-pill">${getIcon('CHECK', { size: 12 })} 현재 사용 중</span>` : ''}
               </div>
 
-              <div class="trip-card-meta">
-                <div class="trip-card-meta-row">
-                  <span class="trip-card-meta-label">여행 기간</span>
-                  <span class="trip-card-meta-val">${escapeHtml(durationText)}</span>
+              <!-- 4대 핵심 정보 칩 그리드 -->
+              <div class="trip-card-metrics-grid">
+                <!-- 1) 기간 -->
+                <div class="trip-metric-item">
+                  <span class="trip-metric-icon">${getIcon('CALENDAR', { size: 14 })}</span>
+                  <span class="trip-metric-text" title="${escapeHtml(durationText)}">
+                    <span class="trip-metric-strong">${escapeHtml(durationText)}</span>
+                  </span>
                 </div>
-                <div class="trip-card-meta-row">
-                  <span class="trip-card-meta-label">등록 일정</span>
-                  <span class="trip-card-meta-val">${itemCount}개</span>
+                <!-- 2) 장소 -->
+                <div class="trip-metric-item">
+                  <span class="trip-metric-icon">${getIcon('MAP_PIN', { size: 14 })}</span>
+                  <span class="trip-metric-text">
+                    등록 일정 <span class="trip-metric-strong">${itemCount}개</span>
+                  </span>
                 </div>
-                <div class="trip-card-meta-row">
-                  <span class="trip-card-meta-label">총 경비</span>
-                  <span class="trip-card-meta-val">${formatAmount(totalCost, baseCurrency)}</span>
+                <!-- 3) 경비 -->
+                <div class="trip-metric-item">
+                  <span class="trip-metric-icon">${getIcon('MONEY', { size: 14 })}</span>
+                  <span class="trip-metric-text">
+                    <span class="trip-metric-strong">${formatAmount(totalCost, baseCurrency)}</span>
+                    ${participants.length >= 2 ? `<span class="trip-metric-sub">(1인당 ${formatAmount(perPersonCost, baseCurrency)})</span>` : ''}
+                  </span>
+                </div>
+                <!-- 4) 인원 -->
+                <div class="trip-metric-item">
+                  <span class="trip-metric-icon">${getIcon('USERS', { size: 14 })}</span>
+                  <span class="trip-metric-text" title="${escapeHtml(participantsText)}">
+                    <span class="trip-metric-strong">${escapeHtml(participantsText)}</span>
+                  </span>
                 </div>
               </div>
 
+              <!-- 하단 액션 바 -->
               <div class="trip-card-actions">
-                ${
-                  isSelected
-                    ? `<button type="button" class="btn btn-secondary btn-sm" disabled>선택 중</button>`
-                    : `<button type="button" class="btn btn-primary btn-sm btn-select-trip" data-id="${escapeHtml(tripId)}">이 계획 선택</button>`
-                }
-                <button type="button" class="btn btn-outline btn-sm btn-duplicate-trip" data-id="${escapeHtml(tripId)}" title="계획 복제">
-                  ${getIcon('COPY', { size: 14 })}
-                  <span>복제</span>
-                </button>
-                ${
-                  trips.length > 1
-                    ? `<button type="button" class="btn btn-danger btn-sm btn-delete-trip" data-id="${escapeHtml(tripId)}" title="계획 삭제">
-                        ${getIcon('DELETE', { size: 14 })}
-                      </button>`
-                    : ''
-                }
+                <div class="trip-card-actions-left">
+                  ${
+                    isSelected
+                      ? `
+                        <button type="button" class="btn btn-secondary btn-sm" disabled>
+                          ${getIcon('CHECK', { size: 14 })}
+                          <span>현재 사용 중</span>
+                        </button>
+                        <button type="button" class="btn btn-outline btn-sm btn-edit-trip-info" title="여행 정보 수정">
+                          ${getIcon('EDIT', { size: 14 })}
+                          <span>정보 수정</span>
+                        </button>
+                      `
+                      : `
+                        <button type="button" class="btn btn-primary btn-sm btn-select-trip" data-id="${escapeHtml(tripId)}">
+                          ${getIcon('ARROW_RIGHT', { size: 14 })}
+                          <span>이 계획으로 전환</span>
+                        </button>
+                      `
+                  }
+                </div>
+                <div class="trip-card-actions-right">
+                  <button type="button" class="btn btn-outline btn-sm btn-duplicate-trip" data-id="${escapeHtml(tripId)}" title="계획 사본 만들기">
+                    ${getIcon('COPY', { size: 14 })}
+                    <span>복제</span>
+                  </button>
+                  ${
+                    trips.length > 1
+                      ? `
+                        <button type="button" class="btn btn-outline-danger btn-sm btn-delete-trip" data-id="${escapeHtml(tripId)}" title="계획 삭제">
+                          ${getIcon('DELETE', { size: 14 })}
+                        </button>
+                      `
+                      : ''
+                  }
+                </div>
               </div>
             </div>
           `;
@@ -2265,6 +2318,10 @@
         // compare 탭 (계획 한눈에 비교 뷰)
         html += `
           <div class="trip-compare-container">
+            <div class="trip-compare-banner">
+              <span class="compare-banner-icon">${getIcon('NOTE', { size: 16 })}</span>
+              <span>서로 다른 여행 계획의 예산, 일정 규모, 일차별 동선을 한눈에 비교하고 원하는 계획으로 바로 전환해보세요.</span>
+            </div>
             <div class="trip-compare-grid">
         `;
 
@@ -2272,60 +2329,86 @@
           const isSelected = trip.metadata && trip.metadata.id === currentTripId;
           const totalCost = calculateTripTotalExpense(trip);
           const baseCurrency = (trip.metadata && trip.metadata.baseCurrency) || 'KRW';
-          const durationText = getTripDurationText(trip.metadata && trip.metadata.startDate, trip.metadata && trip.metadata.endDate);
+          const startDate = trip.metadata && trip.metadata.startDate;
+          const endDate = trip.metadata && trip.metadata.endDate;
+          const hasValidDates = Boolean(startDate && endDate);
+          const durationText = getTripDurationText(startDate, endDate);
           const itemCount = (trip.items || []).length;
           const daySummaries = getTripDaySummaries(trip);
+          const maxDay = Math.max(1, ...((trip.items || []).map((it) => Number(it.day) || 1)));
           const tripId = (trip.metadata && trip.metadata.id) || '';
+          const tripTitle = (trip.metadata && trip.metadata.title) || '새로운 여행 계획';
+          const rawParticipants = (trip.metadata && trip.metadata.participants) || [];
+          const participants = Array.isArray(rawParticipants) ? rawParticipants.filter(Boolean) : [];
+          const participantCount = Math.max(1, participants.length);
+          const perPersonCost = Math.round(totalCost / participantCount);
 
           html += `
             <div class="trip-compare-card${isSelected ? ' is-current' : ''}">
+              <div class="compare-card-accent-bar"></div>
               <div class="trip-compare-header">
-                <div class="trip-compare-title">${escapeHtml((trip.metadata && trip.metadata.title) || '새로운 여행 계획')}</div>
-                ${isSelected ? `<span class="badge-selected">[현재 활성]</span>` : ''}
+                <div class="trip-compare-title-wrap">
+                  <h3 class="trip-compare-title">${escapeHtml(tripTitle)}</h3>
+                  <span class="compare-duration-sub">${escapeHtml(durationText)}</span>
+                </div>
+                ${isSelected ? `<span class="badge-selected-pill">${getIcon('CHECK', { size: 12 })} 현재 활성</span>` : ''}
               </div>
 
-              <div class="trip-compare-stats">
-                <div class="trip-compare-stat-item">
-                  <span class="trip-compare-stat-label">기간</span>
-                  <span class="trip-compare-stat-val">${escapeHtml(durationText)}</span>
+              <!-- 핵심 비교 지표 박스 -->
+              <div class="compare-hero-metrics">
+                <div class="compare-hero-item">
+                  <span class="compare-hero-label">총 예상 경비</span>
+                  <span class="compare-hero-val">${formatAmount(totalCost, baseCurrency)}</span>
+                  ${participants.length >= 2 ? `<span class="compare-hero-sub">1인당 ${formatAmount(perPersonCost, baseCurrency)}</span>` : `<span class="compare-hero-sub">기준: ${escapeHtml(baseCurrency)}</span>`}
                 </div>
-                <div class="trip-compare-stat-item">
-                  <span class="trip-compare-stat-label">총 예상 경비</span>
-                  <span class="trip-compare-stat-val">${formatAmount(totalCost, baseCurrency)}</span>
+                <div class="compare-hero-item">
+                  <span class="compare-hero-label">여행 기간</span>
+                  <span class="compare-hero-val" style="font-size:0.92rem;">${escapeHtml(durationText)}</span>
+                  <span class="compare-hero-sub">${hasValidDates ? '일정 확정' : '기간 미정'}</span>
                 </div>
-                <div class="trip-compare-stat-item">
-                  <span class="trip-compare-stat-label">방문지 / 일정</span>
-                  <span class="trip-compare-stat-val">${itemCount}개</span>
+                <div class="compare-hero-item">
+                  <span class="compare-hero-label">일정 규모</span>
+                  <span class="compare-hero-val">${itemCount}개 장소</span>
+                  <span class="compare-hero-sub">총 ${maxDay}일차 일정</span>
                 </div>
-                <div class="trip-compare-stat-item">
-                  <span class="trip-compare-stat-label">참가 인원</span>
-                  <span class="trip-compare-stat-val">${((trip.metadata && trip.metadata.participants) || []).length}명</span>
+                <div class="compare-hero-item">
+                  <span class="compare-hero-label">참가 인원</span>
+                  <span class="compare-hero-val">${participants.length || 1}명</span>
+                  <span class="compare-hero-sub" title="${escapeHtml(participants.join(', ') || '인원 미정')}">${escapeHtml(participants.slice(0, 2).join(', ') || '참가자 1명')}${participants.length > 2 ? ` 외 ${participants.length - 2}명` : ''}</span>
                 </div>
               </div>
 
-              <div style="font-size:0.8rem; font-weight:700; color:var(--text-main); margin-bottom:6px;">
-                Day별 주요 일정 요약
-              </div>
+              <div class="compare-section-title">일차별 동선 하이라이트</div>
               <div class="trip-compare-day-list">
-          `;
-
-          daySummaries.forEach((sum) => {
-            html += `
-              <div class="trip-compare-day-item">
-                <span class="trip-compare-day-badge">Day ${sum.day}</span>
-                <span class="trip-compare-day-summary">${escapeHtml(sum.text)}</span>
-              </div>
-            `;
-          });
-
-          html += `
+                ${daySummaries.map((sum) => `
+                  <div class="trip-compare-day-item">
+                    <div class="compare-day-badge-col">
+                      <span class="compare-day-badge" style="background-color: ${getDayColor(sum.day)};">Day ${sum.day}</span>
+                    </div>
+                    <div class="compare-day-route-wrap">
+                      ${
+                        sum.places && sum.places.length > 0
+                          ? `
+                            <div class="compare-day-chips">
+                              ${sum.places.map((place, pIdx) => `
+                                ${pIdx > 0 ? `<span class="compare-route-arrow" aria-hidden="true">${getIcon('ARROW_RIGHT', { size: 12 })}</span>` : ''}
+                                <span class="compare-place-chip" title="${escapeHtml(place)}">${escapeHtml(place)}</span>
+                              `).join('')}
+                              ${sum.moreCount > 0 ? `<span class="compare-place-more">+${sum.moreCount}</span>` : ''}
+                            </div>
+                          `
+                          : `<span class="trip-compare-day-summary text-muted">${escapeHtml(sum.text)}</span>`
+                      }
+                    </div>
+                  </div>
+                `).join('')}
               </div>
 
               <div class="trip-compare-actions">
                 ${
                   isSelected
-                    ? `<button type="button" class="btn btn-secondary btn-sm" style="width:100%;" disabled>현재 보는 중</button>`
-                    : `<button type="button" class="btn btn-primary btn-sm btn-select-trip" data-id="${escapeHtml(tripId)}" style="width:100%;">이 계획으로 보기</button>`
+                    ? `<button type="button" class="btn btn-secondary btn-sm w-100" disabled>현재 보는 중</button>`
+                    : `<button type="button" class="btn btn-primary btn-sm btn-select-trip w-100" data-id="${escapeHtml(tripId)}">이 계획으로 보기</button>`
                 }
               </div>
             </div>
@@ -2383,6 +2466,14 @@
             closeModal();
             showToast(`'${target.metadata.title || '선택한'}' 계획으로 전환되었습니다.`);
           }
+        });
+      });
+
+      // 계획 정보 수정 이벤트 (수정 모달 연결)
+      dom.modalContainer.querySelectorAll('.btn-edit-trip-info').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          closeModal();
+          openTripSettingsModal();
         });
       });
 

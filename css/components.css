@@ -1867,28 +1867,31 @@
    복수 여행 계획(Multi-Trip) 관리 및 비교 UI 스타일
    ========================================================================== */
 
-/* 모달 내 서브 탭 ([계획 목록], [계획 비교]) */
+/* 상단 탭: iOS 세그먼트 컨트롤 스타일 */
 .trip-modal-tabs {
   display: flex;
-  gap: 8px;
-  border-bottom: 2px solid var(--border-subtle);
+  background: var(--gray-100, #f1f5f9);
+  padding: 4px;
+  border-radius: 12px;
+  gap: 4px;
   margin-bottom: 18px;
-  padding-bottom: 2px;
 }
 
 .trip-modal-tab-btn {
-  display: inline-flex;
+  flex: 1;
+  display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 8px 16px;
-  font-size: 0.875rem;
+  border: none;
+  border-radius: 9px;
   font-weight: 600;
+  font-size: 0.88rem;
   color: var(--text-muted);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-  transition: all var(--transition-fast);
   background: transparent;
   cursor: pointer;
+  transition: all 0.2s;
 }
 
 .trip-modal-tab-btn:hover {
@@ -1896,150 +1899,215 @@
 }
 
 .trip-modal-tab-btn.active {
-  color: var(--primary-600);
-  border-bottom-color: var(--primary-600);
+  background: #ffffff;
+  color: var(--primary-700);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  font-weight: 700;
 }
 
-/* 상단 액션 툴바 및 생성 버튼 */
+/* 상단 툴바 */
 .trip-manager-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
   margin-bottom: 16px;
-  gap: 12px;
 }
 
 .trip-manager-count {
-  font-size: 0.875rem;
+  font-size: 0.86rem;
   font-weight: 600;
   color: var(--text-muted);
+}
+
+.trip-manager-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-clear-trip-outline {
+  color: var(--danger, #ef4444) !important;
+  border-color: rgba(239, 68, 68, 0.4) !important;
+  background: transparent;
+  transition: all 0.2s;
+}
+
+.btn-clear-trip-outline:hover {
+  background-color: rgba(239, 68, 68, 0.08) !important;
+  border-color: var(--danger, #ef4444) !important;
+  color: #dc2626 !important;
 }
 
 .btn-create-trip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px;
-  background-color: var(--primary-600);
-  color: #ffffff;
-  border-radius: var(--radius-md);
-  font-size: 0.85rem;
   font-weight: 600;
-  transition: all var(--transition-fast);
-  cursor: pointer;
 }
 
-.btn-create-trip:hover {
-  background-color: var(--primary-700);
-}
-
-/* 여행 계획 카드 그리드 */
+/* 계획 목록 카드 그리드 */
 .trip-card-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 14px;
-  margin-bottom: 20px;
-}
-
-.trip-plan-card {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  background-color: #ffffff;
+  gap: 14px;
+}
+
+/* 계획 카드 */
+.trip-plan-card {
+  border-radius: 16px;
+  padding: 18px 20px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 16px;
-  box-shadow: var(--shadow-sm);
-  transition: all var(--transition-fast);
-  position: relative;
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
 }
 
 .trip-plan-card:hover {
-  box-shadow: var(--shadow-md);
-  border-color: var(--primary-400);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
 }
 
 .trip-plan-card.is-selected {
-  border-color: var(--primary-600);
-  border-width: 2px;
-  background-color: #fafcff;
+  border: 2px solid var(--primary-500);
+  background: linear-gradient(180deg, #f8faff 0%, #ffffff 100%);
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.12);
 }
 
 .trip-card-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 10px;
+  margin-bottom: 6px;
 }
 
 .trip-card-title-wrap {
-  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
   min-width: 0;
 }
 
 .trip-card-title {
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: var(--text-main);
   line-height: 1.35;
-  margin-bottom: 4px;
+  margin: 0;
   word-break: break-word;
 }
 
-.badge-selected {
+.badge-trip-status {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: var(--radius-full);
-  background-color: #e0e7ff;
-  color: #4338ca;
+  padding: 2px 8px;
+  border-radius: 9999px;
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 600;
   flex-shrink: 0;
 }
 
-.trip-card-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  margin-bottom: 14px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-subtle);
+.badge-trip-status.badge-confirmed {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
 }
 
-.trip-card-meta-row {
+.badge-trip-status.badge-unconfirmed {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+
+.badge-selected-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: #e0e7ff;
+  color: #3730a3;
+  font-size: 0.74rem;
+  font-weight: 700;
+  border: 1px solid #c7d2fe;
+  box-shadow: 0 1px 4px rgba(79, 70, 229, 0.15);
+  flex-shrink: 0;
+}
+
+/* 4대 핵심 정보 칩 그리드 */
+.trip-card-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin: 14px 0 16px 0;
+  background: var(--gray-50, #f8fafc);
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+}
+
+.trip-metric-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  font-size: 0.84rem;
+  color: var(--text-main);
+  min-width: 0;
 }
 
-.trip-card-meta-label {
-  color: var(--gray-500);
-  min-width: 58px;
+.trip-metric-icon {
+  color: var(--primary-600);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
-.trip-card-meta-val {
-  font-weight: 600;
+.trip-metric-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trip-metric-strong {
+  font-weight: 700;
   color: var(--text-main);
 }
 
+.trip-metric-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
+/* 카드 하단 액션 바 */
 .trip-card-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 8px;
   margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
 }
 
-.trip-card-actions .btn {
-  flex: 1;
+.trip-card-actions-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.trip-card-actions .btn-delete-trip {
-  flex: 0 0 auto;
+.trip-card-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
 }
 
 /* 여행 계획 한눈에 비교 뷰 (Comparison View) */
@@ -2049,71 +2117,143 @@
   gap: 16px;
 }
 
+.trip-compare-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #eff6ff;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+  line-height: 1.45;
+}
+
+.trip-compare-banner .compare-banner-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--primary-600);
+}
+
 .trip-compare-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  align-items: stretch;
 }
 
 .trip-compare-card {
+  border-radius: 16px;
+  padding: 20px 18px 18px 18px;
+  border: 1px solid var(--border-subtle);
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
   display: flex;
   flex-direction: column;
-  background-color: #ffffff;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 16px;
-  box-shadow: var(--shadow-sm);
-  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.trip-compare-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
 }
 
 .trip-compare-card.is-current {
-  border-color: var(--primary-600);
-  border-width: 2px;
-  background-color: #fafcff;
+  border: 2px solid var(--primary-500);
+  background: linear-gradient(180deg, #f8faff 0%, #ffffff 100%);
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.12);
+}
+
+.compare-card-accent-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: #cbd5e1;
+}
+
+.trip-compare-card.is-current .compare-card-accent-bar {
+  background: linear-gradient(90deg, var(--primary-500, #3b82f6) 0%, var(--primary-700, #1d4ed8) 100%);
 }
 
 .trip-compare-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 12px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border-subtle);
+  margin-top: 4px;
+}
+
+.trip-compare-title-wrap {
+  flex: 1;
+  min-width: 0;
 }
 
 .trip-compare-title {
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--text-main);
+  margin: 0 0 2px 0;
   word-break: break-word;
 }
 
-.trip-compare-stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  background-color: var(--gray-50);
-  border-radius: var(--radius-sm);
-  padding: 10px;
-  margin-bottom: 14px;
-}
-
-.trip-compare-stat-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.trip-compare-stat-label {
-  font-size: 0.72rem;
+.compare-duration-sub {
+  font-size: 0.76rem;
   color: var(--text-muted);
 }
 
-.trip-compare-stat-val {
-  font-size: 0.92rem;
+.compare-hero-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 12px;
+  background: var(--gray-50);
+  border-radius: 12px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border-subtle);
+}
+
+.compare-hero-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.compare-hero-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.compare-hero-val {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compare-hero-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compare-section-title {
+  font-size: 0.8rem;
   font-weight: 700;
   color: var(--text-main);
+  margin: 4px 0 8px 0;
 }
 
 .trip-compare-day-list {
@@ -2128,29 +2268,74 @@
 
 .trip-compare-day-item {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 0.78rem;
-  padding: 6px 8px;
-  background-color: #f8fafc;
-  border-radius: var(--radius-sm);
-  border-left: 3px solid var(--primary-500);
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.8rem;
+  padding: 8px 10px;
+  background-color: var(--gray-50, #f8fafc);
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
 }
 
-.trip-compare-day-badge {
+.compare-day-badge-col {
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.compare-day-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 0.72rem;
   font-weight: 700;
-  color: var(--primary-700);
+  flex-shrink: 0;
+}
+
+.compare-day-route-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.compare-day-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.compare-place-chip {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.compare-route-arrow {
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+}
+
+.compare-place-more {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--primary-600);
+  background: #eff6ff;
+  padding: 1px 5px;
+  border-radius: 4px;
 }
 
 .trip-compare-day-summary {
   color: var(--text-main);
-  line-height: 1.35;
+  line-height: 1.4;
   word-break: break-word;
 }
 
 .trip-compare-actions {
   margin-top: auto;
-  padding-top: 10px;
+  padding-top: 12px;
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -2305,7 +2490,46 @@
   }
 
   /* 복수 여행 카드 및 비교 뷰 모바일 최적화 */
-  .trip-card-grid,
+  .trip-card-grid {
+    gap: 12px;
+  }
+
+  .trip-plan-card {
+    padding: 14px 16px;
+    border-radius: 14px;
+  }
+
+  .trip-card-metrics-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .trip-card-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .trip-card-actions-left {
+    width: 100%;
+    display: flex;
+    gap: 6px;
+  }
+
+  .trip-card-actions-left .btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .trip-card-actions-right {
+    width: 100%;
+    margin-left: 0;
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
   .trip-compare-grid {
     grid-template-columns: 1fr;
     gap: 12px;
@@ -2313,11 +2537,12 @@
 
   .trip-modal-tabs {
     gap: 4px;
+    margin-bottom: 14px;
   }
 
   .trip-modal-tab-btn {
-    padding: 6px 12px;
-    font-size: 0.8rem;
+    padding: 6px 10px;
+    font-size: 0.82rem;
   }
 
   .trip-manager-toolbar {
