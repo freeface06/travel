@@ -902,8 +902,13 @@
       }
     }
 
-    // 2. 지도 초기화
+    // 2. 지도 초기화 (하이브리드: 구글 맵 또는 Leaflet 폴백)
     mapManager.init('map-container');
+
+    // 2-1. 모바일 뷰포트 진입 시 초기 바텀시트(half) 및 하단 탭 바 활성화 보장
+    if (window.innerWidth <= 900) {
+      setBottomSheetState('half');
+    }
 
     // 3. 지도 마커 클릭 시 타임라인 카드 포커스
     mapManager.setMarkerClickListener((itemId) => {

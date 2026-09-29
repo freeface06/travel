@@ -13,11 +13,14 @@
   <title>MyTripLog - 여행 일정 & 1/N 최소 송금 정산기</title>
 
   <!--
-    Google Maps JavaScript API
-    - Google Cloud Console에서 발급받은 API 키로 'YOUR_GOOGLE_MAPS_API_KEY'를 대체하십시오.
-    - 필수 활성화 라이브러리: Maps JavaScript API, Places API, Geocoding API
+    지능형 하이브리드 지도 엔진:
+    - Google Maps API 키가 설정되어 있으면 고화질 Google Maps로 동작
+    - API 키가 없거나 플레이스홀더인 경우 Leaflet(OpenStreetMap)으로 무오류 자동 폴백
   -->
-  <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&libraries=places&language=ko&region=KR"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&libraries=places&language=ko&region=KR" async defer></script>
+
 
   <!-- LZ-String CDN (무서버 압축 공유) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js" crossorigin=""></script>
