@@ -649,6 +649,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+  margin-top: 20px;
   padding-top: 14px;
   border-top: 1px solid var(--border-subtle);
 }
@@ -778,12 +779,21 @@
   }
 
   .modal-form-actions {
-    position: sticky;
-    bottom: 0;
-    background-color: #ffffff;
-    padding: 12px 0 4px 0;
+    position: static;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 24px;
+    padding-top: 16px;
     border-top: 1px solid var(--border-subtle);
-    z-index: 5;
+  }
+
+  .modal-form-actions .btn {
+    flex: 1;
+    height: 44px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    justify-content: center;
   }
 
   .category-pill-group {
