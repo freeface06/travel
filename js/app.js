@@ -195,7 +195,7 @@
       lastTime = performance.now();
       velocity = 0;
 
-      panelHeight = panel.getBoundingClientRect().height || (window.innerHeight - 84);
+      panelHeight = panel.getBoundingClientRect().height || (window.innerHeight - 62);
       baseY = getBaseYForState(currentSheetState, panelHeight);
 
       panel.style.transition = 'none';
