@@ -264,11 +264,32 @@
   color: var(--cat-transit);
 }
 
+.card-header-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .card-time-badge {
   font-size: 0.75rem;
   color: var(--primary-700);
   background-color: var(--primary-50);
   border: 1px solid var(--primary-100);
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.card-photos-badge {
+  font-size: 0.72rem;
+  color: #4f46e5;
+  background-color: #eef2ff;
+  border: 1px solid #c7d2fe;
   padding: 3px 8px;
   border-radius: var(--radius-full);
   display: inline-flex;
@@ -284,6 +305,23 @@
   color: var(--text-main);
   line-height: 1.35;
   letter-spacing: -0.01em;
+}
+
+.card-location-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background-color: var(--gray-100);
+  padding: 2.5px 8px;
+  border-radius: var(--radius-sm);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card-details-grid {
@@ -1203,6 +1241,48 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* 비행기 출발/도착 세그먼트 토글러 */
+.flight-type-selector {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.flight-type-option {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 14px;
+  background-color: #ffffff;
+  border: 1.5px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--gray-700);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+
+.flight-type-option input[type="radio"] {
+  display: none;
+}
+
+.flight-type-option:hover {
+  border-color: var(--primary-300);
+  background-color: var(--primary-50);
+  color: var(--primary-700);
+}
+
+.flight-type-option.active {
+  background-color: var(--primary-600);
+  border-color: var(--primary-600);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2);
 }
 
 /* 위치 및 지도 좌표 (구글맵 연동 및 직접 입력) */

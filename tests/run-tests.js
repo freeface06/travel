@@ -29,10 +29,12 @@ const TripShare = require(path.join(__dirname, '../js/share.js'));
 const TripSupabase = require(path.join(__dirname, '../js/supabase.js'));
 const TripMap = require(path.join(__dirname, '../js/map.js'));
 const TripGeocoder = require(path.join(__dirname, '../js/geocoder.js'));
+const TripForms = require(path.join(__dirname, '../js/forms.js'));
 global.TripSupabase = TripSupabase;
 global.TripStore = TripStore;
 global.TripMap = TripMap;
 global.TripGeocoder = TripGeocoder;
+global.TripForms = TripForms;
 
 let totalTests = 0;
 let passedTests = 0;
@@ -799,6 +801,120 @@ runTest('7-5. 여행 계획 삭제 (deleteTrip) 및 최소 1개 유지 방어 �
     assert.strictEqual(callCount, 0, '디바운스 대기 중에는 즉시 호출되지 않아야 함');
     await new Promise((r) => setTimeout(r, 80));
     assert.strictEqual(callCount, 1, '디바운스 시간 후 단 1회만 호출되어야 함');
+  });
+
+  // --------------------------------------------------------------------------
+  // 10. 비행기 출발/도착 단일 시간 분리 및 카테고리별 시간 필드 수집 검증
+  // --------------------------------------------------------------------------
+  console.log('\n--- [Suite 10: 비행기 출발/도착 단일 시간 분리 및 카테고리별 시간 필드 수집 검증] ---');
+
+  await runTest('10-1. FLIGHT 출발편(DEPARTURE) 입력 시 time이 departureTime으로 매핑 및 arrival 필드 초기화 검증', () => {
+    const input = {
+      category: 'FLIGHT',
+      flightType: 'DEPARTURE',
+      title: '인천 출국 (나리타행)',
+      time: '10:30',
+      airport: 'ICN',
+      airline: '대한항공',
+      flightNo: 'KE703'
+    };
+    const extracted = TripForms.formManager.extractFormData(input);
+    assert.strictEqual(extracted.category, 'FLIGHT');
+    assert.strictEqual(extracted.flightType, 'DEPARTURE');
+    assert.strictEqual(extracted.time, '10:30');
+    assert.strictEqual(extracted.departureTime, '10:30');
+    assert.strictEqual(extracted.departureAirport, 'ICN');
+    assert.strictEqual(extracted.arrivalTime, '');
+    assert.strictEqual(extracted.arrivalAirport, '');
+  });
+
+  await runTest('10-2. FLIGHT 도착편(ARRIVAL) 입력 시 time이 arrivalTime으로 매핑 및 departure 필드 초기화 검증', () => {
+    const input = {
+      category: 'FLIGHT',
+      flightType: 'ARRIVAL',
+      title: '나리타 공항 도착',
+      time: '13:00',
+      airport: 'NRT',
+      airline: '대한항공',
+      flightNo: 'KE703'
+    };
+    const extracted = TripForms.formManager.extractFormData(input);
+    assert.strictEqual(extracted.category, 'FLIGHT');
+    assert.strictEqual(extracted.flightType, 'ARRIVAL');
+    assert.strictEqual(extracted.time, '13:00');
+    assert.strictEqual(extracted.arrivalTime, '13:00');
+    assert.strictEqual(extracted.arrivalAirport, 'NRT');
+    assert.strictEqual(extracted.departureTime, '');
+    assert.strictEqual(extracted.departureAirport, '');
+  });
+
+  await runTest('10-3. HOTEL 카테고리 시간 입력 시 time과 checkInTime의 동기화 검증', () => {
+    const inputWithTime = {
+      category: 'HOTEL',
+      title: '신주쿠 워싱턴 호텔',
+      time: '15:00',
+      checkOutTime: '11:00'
+    };
+    const extracted1 = TripForms.formManager.extractFormData(inputWithTime);
+    assert.strictEqual(extracted1.category, 'HOTEL');
+    assert.strictEqual(extracted1.time, '15:00');
+    assert.strictEqual(extracted1.checkInTime, '15:00');
+    assert.strictEqual(extracted1.checkOutTime, '11:00');
+
+    const inputWithCheckIn = {
+      category: 'HOTEL',
+      title: '긴자 호텔',
+      checkInTime: '16:00'
+    };
+    const extracted2 = TripForms.formManager.extractFormData(inputWithCheckIn);
+    assert.strictEqual(extracted2.time, '16:00');
+    assert.strictEqual(extracted2.checkInTime, '16:00');
+  });
+
+  await runTest('10-4. DINING 및 AIRPORT 카테고리 시간(time) 필드 수집 및 보존 검증', () => {
+    const diningInput = {
+      category: 'DINING',
+      title: '이치란 라멘',
+      time: '12:30',
+      mealType: '중식'
+    };
+    const diningExtracted = TripForms.formManager.extractFormData(diningInput);
+    assert.strictEqual(diningExtracted.time, '12:30');
+    assert.strictEqual(diningExtracted.mealType, '중식');
+
+    const airportInput = {
+      category: 'AIRPORT',
+      title: '나리타 입국 심사',
+      time: '13:40',
+      baggageClaim: '수취대 3번'
+    };
+    const airportExtracted = TripForms.formManager.extractFormData(airportInput);
+    assert.strictEqual(airportExtracted.time, '13:40');
+    assert.strictEqual(airportExtracted.baggageClaim, '수취대 3번');
+  });
+
+  await runTest('10-5. 동일 일차(Day) 내 시간순 정렬 및 미지정 시간 후순위 배치 알고리즘 검증', () => {
+    const items = [
+      { id: 'item-1', day: 1, title: '디너 오마카세', time: '19:00' },
+      { id: 'item-2', day: 1, title: '인천 출국 비행기', category: 'FLIGHT', flightType: 'DEPARTURE', time: '09:00' },
+      { id: 'item-3', day: 1, title: '호텔 체크인', category: 'HOTEL', time: '15:00' },
+      { id: 'item-4', day: 1, title: '자유 산책 (시간 미정)', time: '' },
+      { id: 'item-5', day: 1, title: '점심 라멘', time: '12:30' }
+    ];
+
+    const sorted = items.slice().sort((a, b) => {
+      const timeA = a.time || (a.category === 'FLIGHT' ? (a.flightType === 'ARRIVAL' ? a.arrivalTime : a.departureTime) : (a.category === 'HOTEL' ? a.checkInTime : '')) || '';
+      const timeB = b.time || (b.category === 'FLIGHT' ? (b.flightType === 'ARRIVAL' ? b.arrivalTime : b.departureTime) : (b.category === 'HOTEL' ? b.checkInTime : '')) || '';
+      if (timeA && timeB) {
+        return timeA.localeCompare(timeB);
+      }
+      if (timeA && !timeB) return -1;
+      if (!timeA && timeB) return 1;
+      return 0;
+    });
+
+    const resultIds = sorted.map((it) => it.id);
+    assert.deepStrictEqual(resultIds, ['item-2', 'item-5', 'item-3', 'item-1', 'item-4']);
   });
 
   // --------------------------------------------------------------------------

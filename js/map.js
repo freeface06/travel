@@ -110,9 +110,22 @@
       DINING: '식당',
       TRANSIT: '교통'
     };
-    const catLabel = catMeta[item.category] || '일정';
-    const timeText = item.time || item.checkInTime || item.departureTime || '';
-    const subInfo = item.flightNo || item.transitMode || item.menuRecommendation || item.address || '';
+    let catLabel = catMeta[item.category] || '일정';
+    if (item.category === 'FLIGHT') {
+      catLabel = item.flightType === 'ARRIVAL' ? '비행기(도착)' : '비행기(출발)';
+    }
+
+    let timeText = item.time || item.checkInTime || (item.flightType === 'ARRIVAL' ? item.arrivalTime : item.departureTime) || '';
+    if (item.category === 'FLIGHT' && timeText) {
+      timeText = item.flightType === 'ARRIVAL' ? `도착 ${timeText}` : `출발 ${timeText}`;
+    } else if (item.category === 'HOTEL' && timeText) {
+      timeText = `체크인 ${timeText}`;
+    }
+
+    const subInfo = (item.category === 'FLIGHT' && item.airport)
+      ? `${item.flightType === 'ARRIVAL' ? '도착 공항' : '출발 공항'}: ${item.airport}${item.flightNo ? ' (' + item.flightNo + ')' : ''}`
+      : (item.flightNo || item.transitMode || item.menuRecommendation || item.address || '');
+
     const costText = Number(item.cost) > 0 ? `${Number(item.cost).toLocaleString()}원` : '';
 
     return `

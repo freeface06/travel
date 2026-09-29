@@ -1,5 +1,5 @@
 /**
- * @intent 메인 애플리케이션 진입점 및 전역 이벤트 오케스트레이터 (Google Maps 의존성 완전 제거 및 Leaflet 단독 표준화)
+ * @intent 비행기 출발/도착 단일 시간 분리 및 타임라인 시간순 정렬/시간·사진·위치 뱃지 강화 메인 오케스트레이터
  * @agent  Gemini/manager-develop
  * @branch feat/mytriplog-core
  * @author @developer_name
@@ -649,7 +649,31 @@
   }
 
   /**
-   * @intent 타임라인 패널 렌더링 - 스루라인(동선 연결선), 모던 트래블 카드, 정제된 미니멀 액션 바(지도/수정/삭제)
+   * @intent 일정 아이템의 카테고리 및 속성에 따른 타임라인 시간 뱃지 텍스트 서식화
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   * @param {object} item
+   * @returns {string} 서식화된 시간 텍스트 (없으면 빈 문자열)
+   */
+  function formatItemTimeBadge(item) {
+    if (!item) return '';
+    if (item.category === 'FLIGHT') {
+      const flightTime = item.time || (item.flightType === 'ARRIVAL' ? item.arrivalTime : item.departureTime);
+      if (!flightTime) return '';
+      return item.flightType === 'ARRIVAL' ? ('도착 ' + flightTime) : ('출발 ' + flightTime);
+    }
+    if (item.category === 'HOTEL') {
+      if (item.time) return '체크인 ' + item.time;
+      if (item.checkInTime) return '체크인 ' + item.checkInTime;
+      return '';
+    }
+    return item.time || '';
+  }
+
+  /**
+   * @intent 타임라인 패널 렌더링 - 시간순 자동 정렬, 스루라인(동선 연결선), 모던 트래블 카드, 정제된 미니멀 액션 바(지도/수정/삭제)
    * @agent  Gemini/manager-develop
    * @branch feat/mytriplog-core
    * @author @developer_name
@@ -659,7 +683,19 @@
    * @param {string|null} selectedItemId
    */
   function renderTimelinePanel(trip, selectedDay, selectedItemId) {
-    const dayItems = (trip.items || []).filter((item) => Number(item.day) === Number(selectedDay));
+    const dayItems = (trip.items || [])
+      .filter((item) => Number(item.day) === Number(selectedDay))
+      .slice()
+      .sort((a, b) => {
+        const timeA = a.time || (a.category === 'FLIGHT' ? (a.flightType === 'ARRIVAL' ? a.arrivalTime : a.departureTime) : (a.category === 'HOTEL' ? a.checkInTime : '')) || '';
+        const timeB = b.time || (b.category === 'FLIGHT' ? (b.flightType === 'ARRIVAL' ? b.arrivalTime : b.departureTime) : (b.category === 'HOTEL' ? b.checkInTime : '')) || '';
+        if (timeA && timeB) {
+          return timeA.localeCompare(timeB);
+        }
+        if (timeA && !timeB) return -1;
+        if (!timeA && timeB) return 1;
+        return 0;
+      });
 
     let html = `
       <div class="timeline-toolbar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
@@ -695,6 +731,11 @@
       const cat = CATEGORIES[item.category] || { label: '기타', icon: 'NOTE', color: '#64748b' };
       const isActive = item.id === selectedItemId;
       const activeClass = isActive ? ' is-active' : '';
+      const timeBadge = formatItemTimeBadge(item);
+      const photos = (item.photos && item.photos.length > 0)
+        ? item.photos
+        : (item.photoDataUrl ? [{ id: item.photoId || 'photo-1', dataUrl: item.photoDataUrl }] : []);
+      const photosCount = photos.length;
 
       html += `
         <div class="timeline-flow-item${activeClass}" data-id="${escapeHtml(item.id)}">
@@ -709,10 +750,27 @@
                   ${getIcon(cat.icon, { size: 14 })} <span>${cat.label}</span>
                 </span>
               </div>
-              ${item.time ? `<div class="card-time-badge">${getIcon('CLOCK', { size: 13 })} <span>${escapeHtml(item.time)}</span></div>` : ''}
+              <div class="card-header-badges">
+                ${timeBadge ? `
+                  <div class="card-time-badge">
+                    ${getIcon('CLOCK', { size: 13 })} <span>${escapeHtml(timeBadge)}</span>
+                  </div>
+                ` : ''}
+                ${photosCount > 0 ? `
+                  <div class="card-photos-badge">
+                    ${getIcon('IMAGE', { size: 13 })} <span>사진 ${photosCount}장</span>
+                  </div>
+                ` : ''}
+              </div>
             </div>
 
             <div class="card-title">${escapeHtml(item.title || '일정')}</div>
+
+            ${item.address ? `
+              <div class="card-location-tag">
+                ${getIcon('MAP_PIN', { size: 12 })} <span>${escapeHtml(item.address)}</span>
+              </div>
+            ` : ''}
 
             <!-- 카테고리별 핵심 요약 그리드 -->
             ${renderItemCardDetails(item)}
@@ -834,10 +892,18 @@
 
     switch (item.category) {
       case 'FLIGHT':
+        const isArr = item.flightType === 'ARRIVAL';
+        details.push({ label: '구분', val: isArr ? '도착편 (착륙)' : '출발편 (이륙)' });
+        const airportVal = item.airport || (isArr ? item.arrivalAirport : item.departureAirport);
+        if (airportVal) {
+          details.push({ label: isArr ? '도착 공항' : '출발 공항', val: airportVal });
+        } else if (item.departureAirport && item.arrivalAirport) {
+          details.push({ label: '구간', val: `${item.departureAirport} -> ${item.arrivalAirport}` });
+        }
         if (item.flightNo) details.push({ label: '편명', val: item.flightNo });
-        if (item.departureAirport && item.arrivalAirport) details.push({ label: '구간', val: `${item.departureAirport} -> ${item.arrivalAirport}` });
-        if (item.terminalGate) details.push({ label: '터미널/게이트', val: item.terminalGate });
         if (item.seat) details.push({ label: '좌석', val: item.seat });
+        if (item.terminalGate) details.push({ label: '터미널/게이트', val: item.terminalGate });
+        if (item.bookingRef) details.push({ label: '예약번호', val: item.bookingRef });
         break;
 
       case 'AIRPORT':
@@ -1258,6 +1324,49 @@
     const ticketCostInput = document.getElementById('item-ticket-cost');
     attachCommaFormatter(ticketCostInput);
 
+    /**
+     * @intent 비행기 카테고리 출발/도착 구분 토글 및 라벨/플레이스홀더 실시간 반응형 동기화
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     */
+    function setupFlightTypeListeners() {
+      const selector = document.getElementById('flight-type-selector');
+      if (!selector) return;
+      const airportLabel = document.getElementById('flight-airport-label');
+      const airportInput = document.getElementById('flight-airport-input');
+      const timeLabel = document.getElementById('flight-time-label');
+      const options = selector.querySelectorAll('.flight-type-option');
+      const radios = selector.querySelectorAll('input[name="flightType"]');
+
+      radios.forEach((radio) => {
+        radio.addEventListener('change', () => {
+          const val = radio.value;
+          options.forEach((opt) => {
+            const r = opt.querySelector('input[type="radio"]');
+            if (r && r.value === val) {
+              opt.classList.add('active');
+            } else {
+              opt.classList.remove('active');
+            }
+          });
+
+          if (val === 'ARRIVAL') {
+            if (airportLabel) airportLabel.textContent = '도착 공항 (IATA)';
+            if (airportInput) airportInput.placeholder = '예: NRT, HND';
+            if (timeLabel) timeLabel.textContent = '도착 시각 *';
+          } else {
+            if (airportLabel) airportLabel.textContent = '출발 공항 (IATA)';
+            if (airportInput) airportInput.placeholder = '예: ICN, GMP';
+            if (timeLabel) timeLabel.textContent = '출발 시각 *';
+          }
+        });
+      });
+    }
+
+    setupFlightTypeListeners();
+
     // 카테고리 알약 버튼 클릭 시 동적 필드 재렌더링
     const catGroup = document.getElementById('category-selector');
     const dynamicFields = document.getElementById('dynamic-category-fields');
@@ -1273,6 +1382,8 @@
         dynamicFields.innerHTML = formManager.renderCategorySpecificFields(cat, defaultData);
         // 동적 필드 재렌더링 시 입장료 콤마 포맷터 바인딩
         attachCommaFormatter(document.getElementById('item-ticket-cost'));
+        // 비행기 폼인 경우 출발/도착 토글러 리스너 바인딩
+        setupFlightTypeListeners();
       });
     });
 

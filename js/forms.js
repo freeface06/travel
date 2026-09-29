@@ -1,5 +1,5 @@
 /**
- * @intent 6대 카테고리 동적 폼 및 다중 사진(사진 배열) 첨부/관리 지원 모듈
+ * @intent 비행기(FLIGHT) 출발/도착 단일 시간 및 공항 분리 입력 지원, 전 카테고리 시간 필드 보강, 동적 폼 및 다중 사진 관리 모듈
  * @agent  Gemini/manager-develop
  * @branch feat/mytriplog-core
  * @author @developer_name
@@ -243,8 +243,22 @@
     renderCategorySpecificFields(category, data = {}) {
       switch (category) {
         case 'FLIGHT':
+          const flightType = data.flightType || (data.arrivalTime && !data.departureTime ? 'ARRIVAL' : 'DEPARTURE');
           return `
             <div class="category-field-box">
+              <div class="form-group">
+                <label class="form-label">비행 구분</label>
+                <div class="flight-type-selector" id="flight-type-selector">
+                  <label class="flight-type-option ${flightType === 'DEPARTURE' ? 'active' : ''}">
+                    <input type="radio" name="flightType" value="DEPARTURE" ${flightType === 'DEPARTURE' ? 'checked' : ''} />
+                    <span>출발편 (이륙)</span>
+                  </label>
+                  <label class="flight-type-option ${flightType === 'ARRIVAL' ? 'active' : ''}">
+                    <input type="radio" name="flightType" value="ARRIVAL" ${flightType === 'ARRIVAL' ? 'checked' : ''} />
+                    <span>도착편 (착륙)</span>
+                  </label>
+                </div>
+              </div>
               <div class="form-row">
                 <div class="form-group flex-1">
                   <label class="form-label">항공사</label>
@@ -257,22 +271,12 @@
               </div>
               <div class="form-row">
                 <div class="form-group flex-1">
-                  <label class="form-label">출발 공항 (IATA)</label>
-                  <input type="text" name="departureAirport" class="form-control" placeholder="예: ICN" maxlength="4" value="${escapeHtml(data.departureAirport || '')}" />
+                  <label class="form-label" id="flight-airport-label">${flightType === 'ARRIVAL' ? '도착 공항 (IATA)' : '출발 공항 (IATA)'}</label>
+                  <input type="text" name="airport" id="flight-airport-input" class="form-control" placeholder="${flightType === 'ARRIVAL' ? '예: NRT, HND' : '예: ICN, GMP'}" maxlength="4" value="${escapeHtml(data.airport || (flightType === 'ARRIVAL' ? data.arrivalAirport : data.departureAirport) || '')}" />
                 </div>
                 <div class="form-group flex-1">
-                  <label class="form-label">도착 공항 (IATA)</label>
-                  <input type="text" name="arrivalAirport" class="form-control" placeholder="예: NRT, HND" maxlength="4" value="${escapeHtml(data.arrivalAirport || '')}" />
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group flex-1">
-                  <label class="form-label">출발 시각</label>
-                  <input type="time" name="departureTime" class="form-control" value="${escapeHtml(data.departureTime || '')}" />
-                </div>
-                <div class="form-group flex-1">
-                  <label class="form-label">도착 시각</label>
-                  <input type="time" name="arrivalTime" class="form-control" value="${escapeHtml(data.arrivalTime || '')}" />
+                  <label class="form-label" id="flight-time-label">${flightType === 'ARRIVAL' ? '도착 시각 *' : '출발 시각 *'}</label>
+                  <input type="time" name="time" id="flight-time-input" class="form-control" value="${escapeHtml(data.time || (flightType === 'ARRIVAL' ? data.arrivalTime : data.departureTime) || '')}" required />
                 </div>
               </div>
               <div class="form-row">
@@ -297,23 +301,27 @@
             <div class="category-field-box">
               <div class="form-row">
                 <div class="form-group flex-1">
-                  <label class="form-label">수하물 수취대 (Carousel)</label>
-                  <input type="text" name="baggageClaim" class="form-control" placeholder="예: 수취대 7번" value="${escapeHtml(data.baggageClaim || '')}" />
+                  <label class="form-label">탑승 수속 / 도착 시각</label>
+                  <input type="time" name="time" class="form-control" value="${escapeHtml(data.time || '')}" />
                 </div>
                 <div class="form-group flex-1">
-                  <label class="form-label">시내 환승 수단</label>
-                  <input type="text" name="transitToCity" class="form-control" placeholder="예: 공항철도, 리무진 버스" value="${escapeHtml(data.transitToCity || '')}" />
+                  <label class="form-label">수하물 수취대 (Carousel)</label>
+                  <input type="text" name="baggageClaim" class="form-control" placeholder="예: 수취대 7번" value="${escapeHtml(data.baggageClaim || '')}" />
                 </div>
               </div>
               <div class="form-row">
                 <div class="form-group flex-1">
-                  <label class="form-label">픽업 위치 / 탑승 시각</label>
-                  <input type="text" name="pickupInfo" class="form-control" placeholder="예: 1층 4번 승차홈 (14:30)" value="${escapeHtml(data.pickupInfo || '')}" />
+                  <label class="form-label">시내 환승 수단</label>
+                  <input type="text" name="transitToCity" class="form-control" placeholder="예: 공항철도, 리무진 버스" value="${escapeHtml(data.transitToCity || '')}" />
                 </div>
                 <div class="form-group flex-1">
-                  <label class="form-label">입국 / 세관 메모</label>
-                  <input type="text" name="customsMemo" class="form-control" placeholder="예: 전자세관신고 QR 사전 준비" value="${escapeHtml(data.customsMemo || '')}" />
+                  <label class="form-label">픽업 위치 / 탑승 안내</label>
+                  <input type="text" name="pickupInfo" class="form-control" placeholder="예: 1층 4번 승차홈 (14:30)" value="${escapeHtml(data.pickupInfo || '')}" />
                 </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">입국 / 세관 메모</label>
+                <input type="text" name="customsMemo" class="form-control" placeholder="예: 전자세관신고 QR 사전 준비" value="${escapeHtml(data.customsMemo || '')}" />
               </div>
             </div>
           `;
@@ -323,8 +331,8 @@
             <div class="category-field-box">
               <div class="form-row">
                 <div class="form-group flex-1">
-                  <label class="form-label">체크인 시간</label>
-                  <input type="text" name="checkInTime" class="form-control" placeholder="예: 15:00" value="${escapeHtml(data.checkInTime || '')}" />
+                  <label class="form-label">체크인 시각</label>
+                  <input type="time" name="time" class="form-control" value="${escapeHtml(data.time || data.checkInTime || '')}" />
                 </div>
                 <div class="form-group flex-1">
                   <label class="form-label">체크아웃 시간</label>
@@ -392,6 +400,10 @@
             <div class="category-field-box">
               <div class="form-row">
                 <div class="form-group flex-1">
+                  <label class="form-label">방문 / 식사 시각</label>
+                  <input type="time" name="time" class="form-control" value="${escapeHtml(data.time || '')}" />
+                </div>
+                <div class="form-group flex-1">
                   <label class="form-label">식사 분류</label>
                   <select name="mealType" class="form-control">
                     <option value="조식"${(data.mealType || '') === '조식' ? ' selected' : ''}>조식</option>
@@ -401,6 +413,8 @@
                     <option value="바/주점"${(data.mealType || '') === '바/주점' ? ' selected' : ''}>바 / 이자카야</option>
                   </select>
                 </div>
+              </div>
+              <div class="form-row">
                 <div class="form-group flex-1">
                   <label class="form-label">결제 수단</label>
                   <select name="paymentMethod" class="form-control">
@@ -409,16 +423,14 @@
                     <option value="페이/모바일"${(data.paymentMethod || '') === '페이/모바일' ? ' selected' : ''}>모바일 페이 / 교통카드</option>
                   </select>
                 </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group flex-1">
-                  <label class="form-label">예약 시간 / 예약자명</label>
+                <div class="form-group flex-2">
+                  <label class="form-label">예약 세부 / 예약자명</label>
                   <input type="text" name="reservedFor" class="form-control" placeholder="예: 18:30 (예약자: 민우)" value="${escapeHtml(data.reservedFor || '')}" />
                 </div>
-                <div class="form-group flex-2">
-                  <label class="form-label">추천 메뉴</label>
-                  <input type="text" name="menuRecommendation" class="form-control" placeholder="예: 특상 와규 세트, 말차 파르페" value="${escapeHtml(data.menuRecommendation || '')}" />
-                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">추천 메뉴</label>
+                <input type="text" name="menuRecommendation" class="form-control" placeholder="예: 특상 와규 세트, 말차 파르페" value="${escapeHtml(data.menuRecommendation || '')}" />
               </div>
             </div>
           `;
@@ -489,19 +501,29 @@
     }
 
     /**
-     * @intent 폼 제출 데이터 수집 및 천 단위 콤마 제거/정수 정제 보장
+     * @intent 폼 제출 데이터 수집, 비행기 출발/도착 분리 정제 및 시간 필드 일관성 보장
      * @agent  Gemini/manager-develop
      * @branch feat/mytriplog-core
      * @author @developer_name
      * @date   2026-09-29
-     * @param {HTMLFormElement} form 
+     * @param {HTMLFormElement|FormData|object} form 
      * @returns {object} 수집된 일정 객체
      */
     extractFormData(form) {
-      const formData = new FormData(form);
+      let entries = [];
+      if (typeof FormData !== 'undefined' && form instanceof FormData) {
+        entries = Array.from(form.entries());
+      } else if (typeof FormData !== 'undefined' && form && form.tagName === 'FORM') {
+        entries = Array.from(new FormData(form).entries());
+      } else if (form && typeof form.entries === 'function') {
+        entries = Array.from(form.entries());
+      } else if (form && typeof form === 'object') {
+        entries = Object.entries(form);
+      }
+
       const result = {};
 
-      for (const [key, value] of formData.entries()) {
+      for (const [key, value] of entries) {
         const trimmed = typeof value === 'string' ? value.trim() : value;
         if (key === 'cost' || key === 'ticketCostPerPerson') {
           const rawNumberStr = String(trimmed).replace(/,/g, '');
@@ -510,9 +532,40 @@
         } else if (key === 'day') {
           result[key] = Math.max(1, Number(trimmed) || 1);
         } else if (key === 'lat' || key === 'lng') {
-          result[key] = trimmed ? parseFloat(trimmed) : null;
+          result[key] = (trimmed !== null && trimmed !== undefined && trimmed !== '') ? parseFloat(trimmed) : null;
         } else {
           result[key] = trimmed;
+        }
+      }
+
+      // 비행기(FLIGHT) 전용 출발/도착 분리 정제
+      if (result.category === 'FLIGHT') {
+        const fType = result.flightType || 'DEPARTURE';
+        result.flightType = fType;
+        if (fType === 'ARRIVAL') {
+          result.arrivalTime = result.time || '';
+          result.arrivalAirport = result.airport || '';
+          result.departureTime = '';
+          result.departureAirport = '';
+        } else {
+          result.departureTime = result.time || '';
+          result.departureAirport = result.airport || '';
+          result.arrivalTime = '';
+          result.arrivalAirport = '';
+        }
+      }
+
+      // 숙소(HOTEL) 체크인 시각 동기화
+      if (result.category === 'HOTEL') {
+        result.checkInTime = result.time || result.checkInTime || '';
+      }
+
+      // 공통: result.time 필드에 해당 시각이 반드시 온전히 저장되도록 보장
+      if (!result.time) {
+        if (result.category === 'FLIGHT') {
+          result.time = (result.flightType === 'ARRIVAL' ? result.arrivalTime : result.departureTime) || '';
+        } else if (result.category === 'HOTEL') {
+          result.time = result.checkInTime || '';
         }
       }
 
