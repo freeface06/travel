@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <!--
-    @intent MyTripLog Google Maps 스크립트 비동기 로더 최적화 및 Map 클래스 준비 대기 폴링 반영
+    @intent 상단 헤더 메뉴에서 내장 고정된 Google Maps 및 Supabase 클라우드 설정 메뉴 제거, 3대 핵심 메뉴로 정돈
     @agent  Gemini/manager-develop
     @branch feat/mytriplog-core
     @author @developer_name
@@ -28,10 +28,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js" crossorigin=""></script>
 
   <!-- 스타일시트 (캐시 버스팅 적용) -->
-  <link rel="stylesheet" href="css/reset.css?v=20260929_2320" />
-  <link rel="stylesheet" href="css/variables.css?v=20260929_2320" />
-  <link rel="stylesheet" href="css/layout.css?v=20260929_2320" />
-  <link rel="stylesheet" href="css/components.css?v=20260929_2320" />
+  <link rel="stylesheet" href="css/reset.css?v=20260929_2325" />
+  <link rel="stylesheet" href="css/variables.css?v=20260929_2325" />
+  <link rel="stylesheet" href="css/layout.css?v=20260929_2325" />
+  <link rel="stylesheet" href="css/components.css?v=20260929_2325" />
 </head>
 <body>
   <div class="app-container">
@@ -85,25 +85,6 @@
               <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/>
             </svg>
             <span>여행 일정 링크 복사</span>
-          </button>
-          <button type="button" id="btn-menu-maps-config" class="dropdown-menu-item" role="menuitem">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-              <path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/>
-            </svg>
-            <span>Google Maps 키 설정</span>
-          </button>
-          <div class="dropdown-menu-divider"></div>
-          <button type="button" id="btn-menu-cloud-sync" class="dropdown-menu-item dropdown-menu-cloud" role="menuitem">
-            <div class="cloud-menu-icon-wrap">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM10 13v-3l4 4-4 4v-3H6v-2h4z"/>
-              </svg>
-              <span class="sync-dot active"></span>
-            </div>
-            <div class="cloud-menu-text">
-              <span>클라우드 동기화 상태</span>
-              <small id="header-menu-cloud-status">실시간 자동 저장 중</small>
-            </div>
           </button>
         </div>
       </div>
@@ -249,17 +230,17 @@
 
   <!-- Supabase 공식 클라이언트 라이브러리 및 연동 매니저 -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/supabase.js?v=20260929_2320"></script>
+  <script src="js/supabase.js?v=20260929_2325"></script>
 
   <!-- 스크립트 모듈 로드 (캐시 버스팅 적용) -->
-  <script src="js/icons.js?v=20260929_2320"></script>
-  <script src="js/db.js?v=20260929_2320"></script>
-  <script src="js/expense.js?v=20260929_2320"></script>
-  <script src="js/store.js?v=20260929_2320"></script>
-  <script src="js/geocoder.js?v=20260929_2320"></script>
-  <script src="js/map.js?v=20260929_2320"></script>
-  <script src="js/forms.js?v=20260929_2320"></script>
-  <script src="js/share.js?v=20260929_2320"></script>
-  <script src="js/app.js?v=20260929_2320"></script>
+  <script src="js/icons.js?v=20260929_2325"></script>
+  <script src="js/db.js?v=20260929_2325"></script>
+  <script src="js/expense.js?v=20260929_2325"></script>
+  <script src="js/store.js?v=20260929_2325"></script>
+  <script src="js/geocoder.js?v=20260929_2325"></script>
+  <script src="js/map.js?v=20260929_2325"></script>
+  <script src="js/forms.js?v=20260929_2325"></script>
+  <script src="js/share.js?v=20260929_2325"></script>
+  <script src="js/app.js?v=20260929_2325"></script>
 </body>
 </html>

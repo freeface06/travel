@@ -1,5 +1,5 @@
 /**
- * @intent 모바일 바텀시트 풀화면 시 상단 헤더(60px) 가림 방지 높이(122px 오프셋) 연동 및 손잡이 1:1 실시간 추종/바디 양방향 스와이프 제스처 오케스트레이터
+ * @intent 헤더 더보기 드롭다운 메뉴에서 불필요해진 Maps 설정 및 클라우드 동기화 메뉴 제거, 3대 핵심 메뉴 정돈
  * @agent  Gemini/manager-develop
  * @branch feat/mytriplog-core
  * @author @developer_name
@@ -30,8 +30,6 @@
     btnMenuEditTrip: document.getElementById('btn-menu-edit-trip'),
     btnMenuManageTrips: document.getElementById('btn-menu-manage-trips'),
     btnMenuCopyShare: document.getElementById('btn-menu-copy-share'),
-    btnMenuCloudSync: document.getElementById('btn-menu-cloud-sync'),
-    headerMenuCloudStatus: document.getElementById('header-menu-cloud-status'),
     // 기존 호환용 요소 (선택적 참조)
     btnManageTrips: document.getElementById('btn-manage-trips'),
     btnOpenCloudSync: document.getElementById('btn-open-cloud-sync'),
@@ -2465,7 +2463,7 @@
   }
 
   /**
-   * @intent 상단 헤더 메뉴 및 클라우드 실시간 자동 동기화 배지 UI 갱신 (Strict No-Emoji 원칙 준수)
+   * @intent 클라우드 실시간 자동 동기화 배지 UI 갱신 (Strict No-Emoji 원칙 준수)
    * @agent  Gemini/manager-develop
    * @branch feat/mytriplog-core
    * @author @developer_name
@@ -2482,21 +2480,6 @@
       else labelText = '클라우드 대기';
     }
 
-    // 헤더 드롭다운 메뉴 내부 클라우드 텍스트 갱신
-    const menuStatusEl = document.getElementById('header-menu-cloud-status') || dom.headerMenuCloudStatus;
-    if (menuStatusEl) {
-      menuStatusEl.textContent = labelText;
-    }
-
-    // 헤더 드롭다운 메뉴 내부 sync-dot 상태 갱신
-    const menuCloudBtn = document.getElementById('btn-menu-cloud-sync') || dom.btnMenuCloudSync;
-    if (menuCloudBtn) {
-      const dot = menuCloudBtn.querySelector('.sync-dot');
-      if (dot) {
-        dot.className = 'sync-dot ' + (state === 'syncing' ? 'active' : (state === 'error' ? 'error' : 'active'));
-      }
-    }
-
     // 기존 호환용 배지 존재 시 갱신
     const badge = dom.btnOpenCloudSync || document.getElementById('btn-open-cloud-sync');
     const textEl = dom.cloudSyncBadgeText || document.getElementById('cloud-sync-badge-text');
@@ -2507,6 +2490,9 @@
       badge.setAttribute('title', `Supabase 클라우드: ${labelText}`);
     }
   }
+
+  // 동의어 별칭 함수 매핑
+  const updateCloudSyncIndicator = updateCloudBadgeUI;
 
   /**
    * @intent 앱 구동 시 백그라운드로 클라우드 데이터 확인 및 자동 복원/초기 백업 동기화
@@ -3168,18 +3154,6 @@
       } catch (err) {
         showToast('링크 복사에 실패했습니다.');
       }
-    });
-
-    // 드롭다운 메뉴 아이템: 4) 클라우드 동기화 상태 모달 열기
-    document.getElementById('btn-menu-cloud-sync')?.addEventListener('click', () => {
-      closeHeaderMenu();
-      openCloudSyncModal();
-    });
-
-    // 드롭다운 메뉴 아이템: 5) Google Maps 키 설정 모달 열기
-    document.getElementById('btn-menu-maps-config')?.addEventListener('click', () => {
-      closeHeaderMenu();
-      openGoogleMapsConfigModal();
     });
 
     // 브랜드 로고/제목 클릭 시 여행 계획 목록 열기 (자연스럽게 유지)
