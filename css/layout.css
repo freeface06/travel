@@ -232,9 +232,12 @@
   border-bottom: 1px solid var(--border-subtle);
   padding: 8px 16px;
   overflow-x: auto;
+  overflow-y: hidden;
   white-space: nowrap;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
   z-index: 90;
 }
 
@@ -246,9 +249,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  width: max-content;
 }
 
 .day-chip {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 6px;

@@ -592,6 +592,14 @@
       showToast(`Day ${maxDays + 1}이 생성되었습니다.`);
     });
     dom.daySelectorBar.appendChild(addDayBtn);
+
+    // 활성 Day 칩으로 부드러운 자동 센터링 스크롤 (일차가 많아져 가로 스크롤 영역을 벗어났을 때 자동 안착)
+    setTimeout(() => {
+      const activeChip = dom.daySelectorBar.querySelector('.day-chip.active');
+      if (activeChip && typeof activeChip.scrollIntoView === 'function') {
+        activeChip.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      }
+    }, 40);
   }
 
   /**
@@ -2693,7 +2701,16 @@
       }
     });
 
-    // 14. 중앙 상태(Store) 변경 감지 구독
+    // 14. 일차(Day) 칩 바 데스크톱 마우스 휠 가로 스크롤 지원
+    const dayChipSlider = document.getElementById('day-chip-slider-wrapper');
+    dayChipSlider?.addEventListener('wheel', (e) => {
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        dayChipSlider.scrollLeft += e.deltaY;
+      }
+    }, { passive: false });
+
+    // 15. 중앙 상태(Store) 변경 감지 구독
     store.subscribe((state) => {
       const { trip, selectedDay, selectedItemId, activeTab } = state;
 
