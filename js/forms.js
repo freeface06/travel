@@ -122,14 +122,31 @@
             ${this.renderCategorySpecificFields(cat, data)}
           </div>
 
-          <!-- 위치 지정 (지도 표시 및 구글맵 좌표 입력) -->
+          <!-- 위치 지정 (구글맵 장소 검색 & 좌표 입력) -->
           <div class="form-group location-section">
             <div class="location-section-header">
-              <label class="form-label" style="margin-bottom:0;">위치 및 지도 좌표 (구글맵 연동)</label>
-              <span class="location-section-tip">구글맵에서 복사한 좌표를 붙여넣거나 직접 입력할 수 있습니다.</span>
+              <label class="form-label" style="margin-bottom:0;">위치 지정 (구글맵 장소 검색 & 좌표)</label>
+              <span class="location-section-tip">장소를 검색하면 이름과 좌표가 자동으로 입력됩니다.</span>
             </div>
 
-            <!-- 1. 구글맵 좌표 한 줄 붙여넣기 입력창 -->
+            <!-- 1. 구글맵 장소 실시간 검색창 -->
+            <div class="place-search-wrap">
+              <div class="input-with-icon">
+                <span class="input-prefix-icon">
+                  ${typeof Icons !== 'undefined' ? Icons.getIcon('SEARCH', { size: 16 }) : ''}
+                </span>
+                <input type="text" id="place-search-input" class="form-control place-search-input" 
+                       placeholder="장소명 또는 주소 검색 (예: 도쿄 타워, 센소지, 신라호텔)" 
+                       value="${escapeHtml(data.address || data.title || '')}" autocomplete="off" />
+                <button type="button" id="btn-clear-place-search" class="btn-clear-input ${data.address || data.title ? '' : 'hidden'}" title="검색어 지우기">
+                  ${typeof Icons !== 'undefined' ? Icons.getIcon('CLOSE', { size: 12 }) : 'X'}
+                </button>
+              </div>
+              <!-- 실시간 자동완성 드롭다운 -->
+              <div id="place-search-dropdown" class="place-search-dropdown hidden"></div>
+            </div>
+
+            <!-- 2. 구글맵 좌표 한 줄 붙여넣기 입력창 -->
             <div class="coord-paste-wrap">
               <div class="coord-paste-input-box">
                 <span class="coord-paste-icon">
@@ -144,7 +161,7 @@
               </div>
             </div>
 
-            <!-- 2. 위도 및 경도 개별 입력창 + 지도 핀 찍기/초기화 버튼 -->
+            <!-- 3. 위도 및 경도 2열 직접 입력창 + 지도 핀 찍기/초기화 -->
             <div class="coord-inputs-grid">
               <div class="coord-input-item">
                 <label class="coord-sublabel" for="item-lat">위도 (Latitude)</label>
@@ -166,8 +183,6 @@
                 </button>
               </div>
             </div>
-
-            <input type="hidden" id="place-search-input" value="${escapeHtml(data.address || data.title || '')}" />
           </div>
 
           <!-- 비용 (공동 결제, KRW 원화 고정) -->

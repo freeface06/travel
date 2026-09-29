@@ -27,8 +27,12 @@ const TripStore = require(path.join(__dirname, '../js/store.js'));
 const Icons = require(path.join(__dirname, '../js/icons.js'));
 const TripShare = require(path.join(__dirname, '../js/share.js'));
 const TripSupabase = require(path.join(__dirname, '../js/supabase.js'));
+const TripMap = require(path.join(__dirname, '../js/map.js'));
+const TripGeocoder = require(path.join(__dirname, '../js/geocoder.js'));
 global.TripSupabase = TripSupabase;
 global.TripStore = TripStore;
+global.TripMap = TripMap;
+global.TripGeocoder = TripGeocoder;
 
 let totalTests = 0;
 let passedTests = 0;
@@ -711,6 +715,8 @@ runTest('7-5. 여행 계획 삭제 (deleteTrip) 및 최소 1개 유지 방어 �
       path.join(__dirname, '../js/forms.js'),
       path.join(__dirname, '../js/app.js'),
       path.join(__dirname, '../js/icons.js'),
+      path.join(__dirname, '../js/map.js'),
+      path.join(__dirname, '../js/geocoder.js'),
       path.join(__dirname, '../index.html'),
       path.join(__dirname, '../css/components.css')
     ];
@@ -726,6 +732,73 @@ runTest('7-5. 여행 계획 삭제 (deleteTrip) 및 최소 1개 유지 방어 �
         }
       }
     }
+  });
+
+  // --------------------------------------------------------------------------
+  // 9. Google Maps 및 Google Places 모듈 검증
+  // --------------------------------------------------------------------------
+  console.log('\n--- [Suite 9: Google Maps 및 Places 검색 엔진 검증] ---');
+
+  await runTest('9-1. TripMap 기본 내장 API 키 무결성 및 Base64 디코딩 검증', () => {
+    assert.ok(TripMap.DEFAULT_MAPS_KEY, '기본 내장 키가 존재해야 함');
+    assert.ok(TripMap.DEFAULT_MAPS_KEY.startsWith('AIzaSy'), '유효한 Google API 키 접두사를 가져야 함');
+    const saved = TripMap.getSavedGoogleApiKey();
+    assert.ok(saved.startsWith('AIzaSy'), '저장된 키가 없을 시 기본 내장 키가 반환되어야 함');
+  });
+
+  await runTest('9-2. TripMap 사용자 커스텀 API 키 저장 및 복원(saveGoogleApiKey) 검증', () => {
+    TripMap.saveGoogleApiKey('AIzaSyCustomTestKey12345');
+    assert.strictEqual(TripMap.getSavedGoogleApiKey(), 'AIzaSyCustomTestKey12345');
+
+    // 빈 값 전달 시 기본 내장 키로 원복
+    TripMap.saveGoogleApiKey('');
+    assert.strictEqual(TripMap.getSavedGoogleApiKey(), TripMap.DEFAULT_MAPS_KEY);
+  });
+
+  await runTest('9-3. TripMapManager 인스턴스 초기화 및 상태 검증', () => {
+    const mgr = new TripMap.TripMapManager();
+    assert.strictEqual(mgr.engine, 'none');
+    assert.strictEqual(mgr.isPinDropActive, false);
+    assert.ok(Array.isArray(mgr.markers));
+    assert.ok(Array.isArray(mgr.polylines));
+  });
+
+  await runTest('9-4. TripMap.createMarkerPopupHtml() XSS 이스케이프 및 구조 검증', () => {
+    const mockItem = {
+      id: 'test-item-1',
+      title: '<script>alert(1)</script>도쿄 타워',
+      category: 'ATTRACTION',
+      time: '14:00',
+      cost: 50000
+    };
+    const html = TripMap.createMarkerPopupHtml(mockItem, 1, '#2563eb');
+    assert.ok(!html.includes('<script>'), 'XSS 스크립트 태그가 이스케이프되어야 함');
+    assert.ok(html.includes('&lt;script&gt;'), 'HTML 엔티티로 변환되어야 함');
+    assert.ok(html.includes('50,000원'), '비용 포맷팅이 정상 반영되어야 함');
+    assert.ok(html.includes('data-item-id="test-item-1"'), '아이템 ID 데이터 속성이 포함되어야 함');
+  });
+
+  await runTest('9-5. TripGeocoder Google Places 및 Geocoder 가용성 플래그 검증', () => {
+    assert.strictEqual(typeof TripGeocoder.isGooglePlacesAvailable, 'function');
+    assert.strictEqual(typeof TripGeocoder.isGoogleGeocoderAvailable, 'function');
+    // Node.js 환경에서는 window.google이 없으므로 false 반환
+    assert.strictEqual(TripGeocoder.isGooglePlacesAvailable(), false);
+    assert.strictEqual(TripGeocoder.isGoogleGeocoderAvailable(), false);
+  });
+
+  await runTest('9-6. TripGeocoder.debounce() 유틸리티 타이머 지연 검증', async () => {
+    let callCount = 0;
+    const debounced = TripGeocoder.debounce(() => {
+      callCount++;
+    }, 50);
+
+    debounced();
+    debounced();
+    debounced();
+
+    assert.strictEqual(callCount, 0, '디바운스 대기 중에는 즉시 호출되지 않아야 함');
+    await new Promise((r) => setTimeout(r, 80));
+    assert.strictEqual(callCount, 1, '디바운스 시간 후 단 1회만 호출되어야 함');
   });
 
   // --------------------------------------------------------------------------

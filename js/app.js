@@ -1277,13 +1277,17 @@
     });
 
     // 위치 및 구글맵 좌표 처리 (#coord-paste-input, #item-lat, #item-lng, #btn-clear-location)
+    // 위치 및 구글맵 장소 검색/좌표 처리 (#place-search-input, #coord-paste-input, #item-lat, #item-lng, #btn-clear-location)
     /**
-     * @intent 구글맵 좌표 자동 파싱, 위도/경도 직접 입력 양방향 동기화 및 좌표 초기화/핀 연동
+     * @intent 구글맵 장소 실시간 검색, 좌표 자동 파싱, 위도/경도 직접 입력 양방향 동기화 및 핀 연동
      * @agent  Gemini/manager-develop
      * @branch feat/mytriplog-core
      * @author @developer_name
      * @date   2026-09-29
      */
+    const placeSearchInput = document.getElementById('place-search-input');
+    const btnClearPlaceSearch = document.getElementById('btn-clear-place-search');
+    const placeSearchDropdown = document.getElementById('place-search-dropdown');
     const coordPasteInput = document.getElementById('coord-paste-input');
     const btnApplyCoordPaste = document.getElementById('btn-apply-coord-paste');
     const itemLatInput = document.getElementById('item-lat');
@@ -1292,6 +1296,173 @@
     const pickOnMapBtn = document.getElementById('btn-pick-on-map');
 
     let lastAutoParsedText = '';
+    let placeSearchDebounceTimer = null;
+    let currentSearchResults = [];
+
+    // 구글맵 장소 실시간 검색 실행 함수
+    function performPlaceSearch(query) {
+      const q = (query || '').trim();
+      if (!q || q.length < 2) {
+        if (placeSearchDropdown) {
+          placeSearchDropdown.innerHTML = '';
+          placeSearchDropdown.classList.add('hidden');
+        }
+        return;
+      }
+
+      TripGeocoder.searchPlaces(q, 6).then((results) => {
+        currentSearchResults = results || [];
+        if (!placeSearchDropdown) return;
+
+        if (currentSearchResults.length === 0) {
+          placeSearchDropdown.innerHTML = `
+            <div style="padding: 10px 12px; font-size: 0.8rem; color: var(--text-muted, #64748b); text-align: center;">
+              검색 결과가 없습니다.
+            </div>
+          `;
+          placeSearchDropdown.classList.remove('hidden');
+          return;
+        }
+
+        placeSearchDropdown.innerHTML = currentSearchResults.map((item, idx) => {
+          const mainText = item.name || item.displayName || '';
+          const subText = item.secondaryText || (item.displayName && item.displayName !== item.name ? item.displayName : '');
+          return `
+            <div class="place-search-item" data-index="${idx}">
+              <span class="place-search-icon">
+                ${typeof Icons !== 'undefined' ? Icons.getIcon('LOCATION_TARGET', { size: 14 }) : ''}
+              </span>
+              <div class="place-search-texts">
+                <span class="place-search-main">${escapeHtml(mainText)}</span>
+                ${subText ? `<span class="place-search-sub">${escapeHtml(subText)}</span>` : ''}
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        placeSearchDropdown.classList.remove('hidden');
+      }).catch((err) => {
+        console.warn('Place search error:', err);
+      });
+    }
+
+    if (placeSearchInput) {
+      placeSearchInput.addEventListener('input', (e) => {
+        const val = e.target.value;
+        if (btnClearPlaceSearch) {
+          btnClearPlaceSearch.classList.toggle('hidden', !val.trim());
+        }
+        clearTimeout(placeSearchDebounceTimer);
+        placeSearchDebounceTimer = setTimeout(() => {
+          performPlaceSearch(val);
+        }, 250);
+      });
+
+      placeSearchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          clearTimeout(placeSearchDebounceTimer);
+          performPlaceSearch(placeSearchInput.value);
+        }
+      });
+    }
+
+    if (btnClearPlaceSearch) {
+      btnClearPlaceSearch.addEventListener('click', () => {
+        if (placeSearchInput) {
+          placeSearchInput.value = '';
+          placeSearchInput.focus();
+        }
+        btnClearPlaceSearch.classList.add('hidden');
+        if (placeSearchDropdown) {
+          placeSearchDropdown.innerHTML = '';
+          placeSearchDropdown.classList.add('hidden');
+        }
+      });
+    }
+
+    if (placeSearchDropdown) {
+      placeSearchDropdown.addEventListener('click', async (e) => {
+        const itemEl = e.target.closest('.place-search-item');
+        if (!itemEl) return;
+        const idx = Number(itemEl.dataset.index);
+        const item = currentSearchResults[idx];
+        if (!item) return;
+
+        try {
+          let lat = item.lat;
+          let lng = item.lng;
+          let name = item.name || item.displayName;
+
+          // Google Places ID 기반 좌표 조회
+          if ((lat == null || lng == null) && item.placeId && typeof TripGeocoder.getPlaceCoordinates === 'function') {
+            const coords = await TripGeocoder.getPlaceCoordinates(item.placeId);
+            if (coords) {
+              lat = coords.lat;
+              lng = coords.lng;
+              if (coords.name) name = coords.name;
+            }
+          }
+
+          if (lat != null && lng != null && !isNaN(lat) && !isNaN(lng)) {
+            lat = Number(lat);
+            lng = Number(lng);
+
+            if (itemLatInput) itemLatInput.value = lat;
+            if (itemLngInput) itemLngInput.value = lng;
+            if (coordPasteInput) {
+              coordPasteInput.value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+              lastAutoParsedText = coordPasteInput.value;
+            }
+
+            const itemTitleInput = document.getElementById('item-title');
+            if (itemTitleInput && !itemTitleInput.value.trim()) {
+              itemTitleInput.value = name;
+            }
+
+            if (placeSearchInput) {
+              placeSearchInput.value = name;
+            }
+            if (btnClearPlaceSearch) {
+              btnClearPlaceSearch.classList.remove('hidden');
+            }
+            if (btnClearLocation) {
+              btnClearLocation.classList.remove('hidden');
+            }
+
+            placeSearchDropdown.innerHTML = '';
+            placeSearchDropdown.classList.add('hidden');
+
+            mapManager.setPinDropPreview(lat, lng);
+            if (mapManager.map && mapManager.engine === 'google') {
+              mapManager.map.panTo({ lat, lng });
+              mapManager.map.setZoom(15);
+            } else if (mapManager.map && mapManager.engine === 'leaflet') {
+              mapManager.map.panTo([lat, lng]);
+            }
+
+            showToast(`구글맵에서 장소와 좌표를 가져왔습니다: ${name}`);
+          } else {
+            showToast('해당 장소의 좌표 정보를 가져올 수 없습니다.');
+          }
+        } catch (err) {
+          console.warn('Place selection error:', err);
+          showToast('장소 좌표 조회 중 오류가 발생했습니다.');
+        }
+      });
+    }
+
+    // 모달 내 드롭다운 외부 클릭 시 닫기
+    document.addEventListener('click', (e) => {
+      if (
+        placeSearchDropdown &&
+        !placeSearchDropdown.contains(e.target) &&
+        e.target !== placeSearchInput &&
+        e.target !== btnClearPlaceSearch
+      ) {
+        placeSearchDropdown.classList.add('hidden');
+      }
+    });
 
     function tryAutoParseCoord(text) {
       if (!text || text.trim() === lastAutoParsedText) return;
@@ -1365,8 +1536,12 @@
       if (itemLngInput) itemLngInput.value = '';
       if (coordPasteInput) coordPasteInput.value = '';
       lastAutoParsedText = '';
-      const searchInput = document.getElementById('place-search-input');
-      if (searchInput) searchInput.value = '';
+      if (placeSearchInput) placeSearchInput.value = '';
+      if (btnClearPlaceSearch) btnClearPlaceSearch.classList.add('hidden');
+      if (placeSearchDropdown) {
+        placeSearchDropdown.innerHTML = '';
+        placeSearchDropdown.classList.add('hidden');
+      }
 
       btnClearLocation.classList.add('hidden');
       activePickerCoord = null;
@@ -2107,6 +2282,90 @@
   }
 
   /**
+   * @intent Google Maps API 키 설정 모달 (기본 내장 키 자동 동작 + 사용자 커스텀 키 등록 및 변경 지원)
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   */
+  function openGoogleMapsConfigModal() {
+    const savedKey = (localStorage.getItem('mytriplog_gmaps_api_key') || '').trim();
+    const hasCustomKey = Boolean(savedKey);
+
+    const bodyHtml = `
+      <form id="form-maps-config" class="editor-form">
+        <div class="cloud-sync-info-box" style="margin-bottom:14px; background:var(--primary-50, #eff6ff); border-color:var(--primary-200, #bfdbfe);">
+          <div class="cloud-info-icon" style="color:var(--primary-600, #2563eb);">
+            ${typeof Icons !== 'undefined' ? Icons.getIcon('MAP', { size: 20 }) : ''}
+          </div>
+          <div class="cloud-info-text">
+            <strong style="color:var(--text-main, #0f172a);">Google Maps 및 Places 실시간 검색 연동</strong>
+            <p style="margin:4px 0 0 0; font-size:0.78rem; color:var(--text-muted, #64748b);">
+              기본 제공 API 키가 내장되어 있어 별도 설정 없이도 Google Maps 렌더링과 Places 장소 실시간 검색이 즉시 동작합니다.
+              본인 전용 Google Cloud API 키를 사용하시려면 아래에 입력해 주십시오.
+            </p>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="input-gmaps-custom-key">Google Maps API 키</label>
+          <input type="text" id="input-gmaps-custom-key" class="form-control" 
+                 placeholder="AIzaSy... (미입력 시 기본 내장 키로 동작)" 
+                 value="${escapeHtml(savedKey)}" autocomplete="off" />
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+            <span style="font-size:0.75rem; color:${hasCustomKey ? 'var(--primary-600, #2563eb)' : 'var(--text-muted, #64748b)'};">
+              현재 상태: ${hasCustomKey ? '사용자 커스텀 키 적용 중' : '기본 내장 키 자동 동작 중'}
+            </span>
+            ${hasCustomKey ? `
+              <button type="button" id="btn-reset-gmaps-key" class="btn btn-outline btn-sm" style="font-size:0.75rem; padding:2px 8px;">
+                기본 키로 복원
+              </button>
+            ` : ''}
+          </div>
+        </div>
+
+        <div class="modal-form-actions">
+          <button type="button" id="btn-maps-config-cancel" class="btn btn-secondary">취소</button>
+          <button type="submit" class="btn btn-primary">
+            ${typeof Icons !== 'undefined' ? Icons.getIcon('CHECK', { size: 16 }) : ''}
+            <span>저장 및 적용</span>
+          </button>
+        </div>
+      </form>
+    `;
+
+    openModal('Google Maps 키 설정', bodyHtml);
+
+    document.getElementById('btn-maps-config-cancel')?.addEventListener('click', closeModal);
+
+    document.getElementById('btn-reset-gmaps-key')?.addEventListener('click', async () => {
+      TripMap.saveGoogleApiKey('');
+      showToast('기본 내장 Google Maps 키로 복원되었습니다.');
+      closeModal();
+      await mapManager.updateApiKey(TripMap.DEFAULT_MAPS_KEY);
+    });
+
+    document.getElementById('form-maps-config')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = document.getElementById('input-gmaps-custom-key');
+      const newKey = (input ? input.value : '').trim();
+
+      TripMap.saveGoogleApiKey(newKey);
+      const activeKey = newKey || TripMap.DEFAULT_MAPS_KEY;
+
+      showToast('Google Maps 설정을 적용하는 중입니다...');
+      closeModal();
+
+      const success = await mapManager.updateApiKey(activeKey);
+      if (success) {
+        showToast(newKey ? 'Google Maps 커스텀 키가 적용되었습니다.' : '기본 내장 Google Maps 키로 동작합니다.');
+      } else {
+        showToast('Google Maps 적용에 실패하여 Leaflet으로 동작합니다.');
+      }
+    });
+  }
+
+  /**
    * @intent Supabase 클라우드 PostgreSQL DB 및 스토리지 연동 상태 모달 (수동 입력 필드 제거 및 내장 클라우드 자동 관리)
    * @agent  Gemini/manager-develop
    * @branch feat/mytriplog-core
@@ -2658,6 +2917,12 @@
     document.getElementById('btn-menu-cloud-sync')?.addEventListener('click', () => {
       closeHeaderMenu();
       openCloudSyncModal();
+    });
+
+    // 드롭다운 메뉴 아이템: 5) Google Maps 키 설정 모달 열기
+    document.getElementById('btn-menu-maps-config')?.addEventListener('click', () => {
+      closeHeaderMenu();
+      openGoogleMapsConfigModal();
     });
 
     // 브랜드 로고/제목 클릭 시 여행 계획 목록 열기 (자연스럽게 유지)
