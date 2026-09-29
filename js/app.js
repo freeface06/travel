@@ -1,5 +1,5 @@
 /**
- * @intent 모바일 바텀시트 손잡이 1:1 실시간 추종 및 바디 최상단 풀다운 축소 제스처 오케스트레이터
+ * @intent 모바일 바텀시트 손잡이 1:1 실시간 추종 및 바디 영역 양방향 스와이프 제스처(위로 올려 확장, 아래로 당겨 축소/닫기) 오케스트레이터
  * @agent  Gemini/manager-develop
  * @branch feat/mytriplog-core
  * @author @developer_name
@@ -391,7 +391,7 @@
     }
 
     // ==========================================
-    // B. 바텀시트 바디(본문) 최상단 스크롤 시 풀다운 축소 (Pull-down to Collapse)
+    // B. 바텀시트 바디(본문) 스와이프 양방향 제스처 (Swipe-up to Expand, Pull-down to Collapse)
     // ==========================================
     function onBodyTouchStart(e) {
       if (window.innerWidth > 900) return;
@@ -421,24 +421,57 @@
 
       const currentScrollTop = contentArea ? contentArea.scrollTop : 0;
 
-      // 본문 내부 스크롤이 더 이상 위로 갈 수 없는 최상단 상태(scrollTop <= 0)에서 아래로 당기는 경우
-      if ((initialScrollTop <= 0 || currentScrollTop <= 0) && deltaY > 0) {
-        if (e.cancelable) {
-          e.preventDefault();
-        }
-        isBodyDragging = true;
-        panel.classList.add('is-dragging');
-        panel.style.setProperty('transition', 'none', 'important');
+      if (currentSheetState === 'half' || currentSheetState === 'peek') {
+        if (deltaY < 0) {
+          // 브라우저 내부 스크롤 대신 바텀시트 확장 제스처 즉시 발동
+          if (e.cancelable) {
+            e.preventDefault();
+          }
+          isBodyDragging = true;
+          panel.classList.add('is-dragging');
+          panel.style.setProperty('transition', 'none', 'important');
 
-        const currentY = baseY + deltaY * 0.85; // 약간의 안정감 있는 댐핑
-        panel.style.setProperty('transform', `translate3d(0, ${currentY}px, 0)`, 'important');
-      } else if (isBodyDragging && deltaY <= 0) {
-        // 당기다가 위로 다시 올린 경우 원래 위치로 유지
-        if (e.cancelable) {
-          e.preventDefault();
+          let currentY = baseY + deltaY;
+          if (currentY < 0) {
+            currentY = currentY * 0.25;
+          }
+          panel.style.setProperty('transform', `translate3d(0, ${currentY}px, 0)`, 'important');
+        } else if (deltaY > 0 && (initialScrollTop <= 0 || currentScrollTop <= 0)) {
+          // 최상단에서 아래로 스와이프: 실시간 하향 추종
+          if (e.cancelable) {
+            e.preventDefault();
+          }
+          isBodyDragging = true;
+          panel.classList.add('is-dragging');
+          panel.style.setProperty('transition', 'none', 'important');
+
+          const currentY = baseY + deltaY * 0.85;
+          panel.style.setProperty('transform', `translate3d(0, ${currentY}px, 0)`, 'important');
         }
-        const currentY = baseY + deltaY * 0.25;
-        panel.style.setProperty('transform', `translate3d(0, ${currentY}px, 0)`, 'important');
+      } else if (currentSheetState === 'full') {
+        if (deltaY > 0 && (initialScrollTop <= 0 || currentScrollTop <= 0)) {
+          // 최상단 상태에서 아래로 스와이프: 축소 추종
+          if (e.cancelable) {
+            e.preventDefault();
+          }
+          isBodyDragging = true;
+          panel.classList.add('is-dragging');
+          panel.style.setProperty('transition', 'none', 'important');
+
+          const currentY = baseY + deltaY * 0.85;
+          panel.style.setProperty('transform', `translate3d(0, ${currentY}px, 0)`, 'important');
+        } else if (isBodyDragging && deltaY <= 0) {
+          // 아래로 당기다가 다시 위로 올린 경우
+          if (e.cancelable) {
+            e.preventDefault();
+          }
+          let currentY = baseY + deltaY * 0.25;
+          if (currentY < 0) {
+            currentY = currentY * 0.25;
+          }
+          panel.style.setProperty('transform', `translate3d(0, ${currentY}px, 0)`, 'important');
+        }
+        // deltaY < 0 이거나 스크롤이 이미 내려가 있을 때는 정상적인 본문 스크롤 허용
       }
     }
 
@@ -449,16 +482,25 @@
       const deltaY = bodyLastDeltaY;
       let targetState = currentSheetState;
 
-      // 손을 뗐을 때 내려간 거리 deltaY가 60px 이상이면 축소!
-      if (deltaY >= 60) {
-        if (currentSheetState === 'full') {
-          targetState = 'half';
-        } else if (currentSheetState === 'half' || currentSheetState === 'peek') {
+      if (currentSheetState === 'half' || currentSheetState === 'peek') {
+        if (deltaY <= -50) {
+          // 위로 50px 이상 올렸거나 위로 휙 올림: 전체 화면으로 확장
+          targetState = 'full';
+        } else if (deltaY >= 60) {
+          // 아래로 60px 이상 내렸음: 아래로 닫힘
           targetState = 'hidden';
+        } else {
+          // 미세한 흔들림: 원래 상태(half) 복귀
+          targetState = 'half';
         }
-      } else {
-        // 60px 미만이면 원래 상태 복귀
-        targetState = currentSheetState;
+      } else if (currentSheetState === 'full') {
+        if (deltaY >= 60) {
+          // 아래로 60px 이상 내렸음: 절반으로 축소
+          targetState = 'half';
+        } else {
+          // 원래 상태(full) 복귀
+          targetState = 'full';
+        }
       }
 
       const targetY = getBaseYForState(targetState, panelHeight);

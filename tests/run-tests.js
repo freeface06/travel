@@ -971,12 +971,26 @@ runTest('7-5. 여행 계획 삭제 (deleteTrip) 및 최소 1개 유지 방어 �
     }
   }
 
-  function resolveBodyPullDown(deltaY, currentState) {
-    if (deltaY >= 60) {
-      if (currentState === 'full') return 'half';
-      if (currentState === 'half' || currentState === 'peek') return 'hidden';
+  function resolveBodySwipe(deltaY, currentState) {
+    if (currentState === 'half' || currentState === 'peek') {
+      if (deltaY <= -50) {
+        return 'full';
+      } else if (deltaY >= 60) {
+        return 'hidden';
+      }
+      return currentState;
+    }
+    if (currentState === 'full') {
+      if (deltaY >= 60) {
+        return 'half';
+      }
+      return 'full';
     }
     return currentState;
+  }
+
+  function resolveBodyPullDown(deltaY, currentState) {
+    return resolveBodySwipe(deltaY, currentState);
   }
 
   await runTest('11-1. 바텀시트 상태별 기준 Y 오프셋(getBaseYForState) 계산 정확성 검증', () => {
@@ -1029,6 +1043,24 @@ runTest('7-5. 여행 계획 삭제 (deleteTrip) 및 최소 1개 유지 방어 �
     assert.strictEqual(resolveBodyPullDown(120, 'full'), 'half');
     assert.strictEqual(resolveBodyPullDown(60, 'half'), 'hidden');
     assert.strictEqual(resolveBodyPullDown(80, 'peek'), 'hidden');
+  });
+
+  await runTest('11-6. 본문 위로 올리기(확장: half/peek -> full, 임계치 -50px) 판정 알고리즘 단위 테스트 검증', () => {
+    // 위로 50px 이상 올렸을 때: half -> full, peek -> full 쫙 열림
+    assert.strictEqual(resolveBodySwipe(-50, 'half'), 'full');
+    assert.strictEqual(resolveBodySwipe(-70, 'half'), 'full');
+    assert.strictEqual(resolveBodySwipe(-50, 'peek'), 'full');
+    assert.strictEqual(resolveBodySwipe(-100, 'peek'), 'full');
+
+    // 위로 50px 미만 올렸을 때(미세한 흔들림): 원래 상태 복귀
+    assert.strictEqual(resolveBodySwipe(-49, 'half'), 'half');
+    assert.strictEqual(resolveBodySwipe(-10, 'half'), 'half');
+    assert.strictEqual(resolveBodySwipe(0, 'half'), 'half');
+    assert.strictEqual(resolveBodySwipe(-49, 'peek'), 'peek');
+
+    // full 상태에서 위로 올렸을 때: full 유지
+    assert.strictEqual(resolveBodySwipe(-50, 'full'), 'full');
+    assert.strictEqual(resolveBodySwipe(-120, 'full'), 'full');
   });
 
   // --------------------------------------------------------------------------
