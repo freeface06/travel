@@ -295,6 +295,8 @@
 .panel-content-area {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 16px;
   background-color: var(--bg-surface-subtle);
 }
@@ -414,31 +416,32 @@
     z-index: var(--z-bottomsheet) !important;
     height: calc(100vh - 62px) !important;
     height: calc(100dvh - 62px) !important;
-    transition: transform 0.38s cubic-bezier(0.2, 0.9, 0.3, 1) !important;
+    transition: transform 0.38s cubic-bezier(0.2, 0.9, 0.3, 1);
     will-change: transform;
     overflow: hidden;
   }
 
-  /* 손가락 터치/마우스 드래그 중 transition 해제 */
+  /* 손가락 터치/마우스 드래그 중 transition 해제 및 GPU 최적화 */
   .side-panel.is-dragging {
     transition: none !important;
+    will-change: transform;
   }
 
-  /* 4단계 바텀시트 상태 (hidden / peek / half / full) - 오직 transform으로만 제어하여 덜컹거림 원천 차단 */
-  .side-panel.sheet-full {
-    transform: translateY(0) !important;
+  /* 4단계 바텀시트 상태 (hidden / peek / half / full) - 드래그 중이 아닐 때만 CSS transform 적용 */
+  .side-panel:not(.is-dragging).sheet-full {
+    transform: translateY(0);
   }
 
-  .side-panel.sheet-half {
-    transform: translateY(52%) !important;
+  .side-panel:not(.is-dragging).sheet-half {
+    transform: translateY(52%);
   }
 
-  .side-panel.sheet-peek {
-    transform: translateY(calc(100% - 68px)) !important;
+  .side-panel:not(.is-dragging).sheet-peek {
+    transform: translateY(calc(100% - 68px));
   }
 
-  .side-panel.sheet-hidden {
-    transform: translateY(calc(100% + 80px)) !important;
+  .side-panel:not(.is-dragging).sheet-hidden {
+    transform: translateY(calc(100% + 80px));
     pointer-events: none;
   }
 

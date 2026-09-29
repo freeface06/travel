@@ -1,5 +1,5 @@
 /**
- * @intent 비행기 출발/도착 단일 시간 분리 및 타임라인 시간순 정렬/시간·사진·위치 뱃지 강화 메인 오케스트레이터
+ * @intent 모바일 바텀시트 손잡이 1:1 실시간 추종 및 바디 최상단 풀다운 축소 제스처 오케스트레이터
  * @agent  Gemini/manager-develop
  * @branch feat/mytriplog-core
  * @author @developer_name
@@ -159,8 +159,8 @@
   function setBottomSheetState(state) {
     currentSheetState = state;
     if (dom.sidePanel) {
-      dom.sidePanel.style.transform = '';
-      dom.sidePanel.style.transition = '';
+      dom.sidePanel.style.removeProperty('transform');
+      dom.sidePanel.style.removeProperty('transition');
       dom.sidePanel.classList.remove('sheet-hidden', 'sheet-peek', 'sheet-half', 'sheet-full');
       dom.sidePanel.classList.add(`sheet-${state}`);
     }
@@ -194,7 +194,7 @@
   }
 
   /**
-   * @intent 모바일 바텀시트 고속 제스처 엔진 (단일 고정 높이 + 순수 GPU transform 기반 스무스 스냅)
+   * @intent 모바일 바텀시트 손잡이 1:1 실시간 추종 및 바디 최상단 스크롤 풀다운 축소 제스처 엔진
    * @agent  Gemini/manager-develop
    * @branch feat/mytriplog-core
    * @author @developer_name
@@ -203,12 +203,14 @@
   function initBottomSheetTouchGesture() {
     const handle = dom.bottomSheetHandle;
     const panel = dom.sidePanel;
+    const contentArea = dom.panelContentArea;
     if (!handle || !panel) return;
 
     // 핸들 또는 상단 핸들 컨테이너 전체를 터치 타겟으로 활용
     const handleTarget = handle.parentElement || handle;
 
     let isDragging = false;
+    let isBodyDragging = false;
     let startY = 0;
     let lastY = 0;
     let lastTime = 0;
@@ -216,6 +218,11 @@
     let baseY = 0;
     let panelHeight = 0;
     let activePointerId = null;
+
+    // 본문 풀다운 제스처 관련 상태
+    let bodyStartY = 0;
+    let bodyLastDeltaY = 0;
+    let initialScrollTop = 0;
 
     // 상태별 기준 Y 오프셋(픽셀) 계산
     function getBaseYForState(state, height) {
@@ -233,9 +240,13 @@
       }
     }
 
+    // ==========================================
+    // A. 손잡이(핸들) 실시간 1:1 드래그 추종 & 스냅 고정
+    // ==========================================
     function onPointerDown(e) {
       if (window.innerWidth > 900) return;
       if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (isBodyDragging) return;
 
       isDragging = true;
       activePointerId = e.pointerId ?? null;
@@ -247,8 +258,8 @@
       panelHeight = panel.getBoundingClientRect().height || (window.innerHeight - 62);
       baseY = getBaseYForState(currentSheetState, panelHeight);
 
-      panel.style.transition = 'none';
       panel.classList.add('is-dragging');
+      panel.style.setProperty('transition', 'none', 'important');
 
       if (e.target && e.target.setPointerCapture && activePointerId !== null) {
         try {
@@ -275,19 +286,19 @@
       const deltaY = currentPointerY - startY;
       let currentY = baseY + deltaY;
 
-      // 위로 끌어올릴 때(currentY < 0): 부드러운 고무줄 저항감
+      // 상단 위로 오버드래그 시 탄성 저항
       if (currentY < 0) {
-        currentY = currentY * 0.2;
+        currentY = currentY * 0.25;
       }
 
-      // 아래로 과도하게 내릴 때(currentY > maxOffset): 고무줄 저항감
+      // 하단 오버드래그 시 탄성 저항
       const maxOffset = panelHeight + 80;
       if (currentY > maxOffset) {
         const overDistance = currentY - maxOffset;
-        currentY = maxOffset + overDistance * 0.2;
+        currentY = maxOffset + overDistance * 0.25;
       }
 
-      panel.style.transform = `translate3d(0, ${currentY}px, 0)`;
+      panel.style.setProperty('transform', `translate3d(0, ${currentY}px, 0)`, 'important');
     }
 
     function onPointerUp(e) {
@@ -295,7 +306,6 @@
       if (activePointerId !== null && e.pointerId !== undefined && e.pointerId !== activePointerId) return;
 
       isDragging = false;
-      panel.classList.remove('is-dragging');
 
       if (e.target && e.target.releasePointerCapture && activePointerId !== null) {
         try {
@@ -309,74 +319,65 @@
 
       // 1. 단순 탭(클릭) 인터랙션: 이동 거리 < 8px
       if (Math.abs(deltaY) < 8) {
-        panel.style.transform = '';
-        panel.style.transition = '';
+        panel.classList.remove('is-dragging');
+        panel.style.removeProperty('transform');
+        panel.style.removeProperty('transition');
         cycleBottomSheetState();
         return;
       }
 
-      // 2. 현재 Y 좌표 계산 (저항감 포함)
+      // 2. 현재 Y 좌표 계산 (탄성 저항 반영)
       let currentY = baseY + deltaY;
       if (currentY < 0) {
-        currentY = currentY * 0.2;
+        currentY = currentY * 0.25;
       }
       const maxOffset = panelHeight + 80;
       if (currentY > maxOffset) {
-        currentY = maxOffset + (currentY - maxOffset) * 0.2;
+        currentY = maxOffset + (currentY - maxOffset) * 0.25;
       }
 
       let targetState = currentSheetState;
 
-      // 플릭(속도 velocity) 및 놓은 위치에 따라 가장 자연스러운 목표 상태(hidden, half, full) 결정
-      const isFlickDown = velocity > 0.45 || deltaY > 100;
-      const isFlickUp = velocity < -0.45 || deltaY < -100;
+      // 플릭(속도 velocity) 및 최종 위치 종합 분석
+      const isFlickDown = velocity > 0.45 || (deltaY > 120 && velocity > 0.2);
+      const isFlickUp = velocity < -0.45 || (deltaY < -120 && velocity < -0.2);
 
       if (isFlickDown) {
-        // 아래로 휙 스와이프: full이면 half 또는 hidden, half이면 hidden
+        // 플릭 다운: full -> half, half -> hidden
         if (currentSheetState === 'full') {
-          if (velocity > 0.85 || deltaY > 240) {
-            targetState = 'hidden';
-          } else {
-            targetState = 'half';
-          }
+          targetState = 'half';
         } else {
-          // half 또는 peek 상태에서 내렸을 때 hidden으로 쏙 들어감
           targetState = 'hidden';
         }
       } else if (isFlickUp) {
-        // 위로 휙 스와이프: hidden/half이면 full
+        // 플릭 업: hidden/half -> full
         targetState = 'full';
       } else {
-        // 천천히 놓았을 때: 가장 가까운 스냅 지점으로 결정
-        const fullY = 0;
-        const halfY = panelHeight * 0.52;
-        const hiddenY = panelHeight + 80;
-
-        const distToFull = Math.abs(currentY - fullY);
-        const distToHalf = Math.abs(currentY - halfY);
-        const distToHidden = Math.abs(currentY - hiddenY);
-
-        if (distToFull <= distToHalf && distToFull <= distToHidden) {
+        // 천천히 놓았을 때 화면 비율 기준 결정
+        // 0 ~ 30%: full, 30% ~ 70%: half, 70% 초과: hidden
+        const ratio = currentY / panelHeight;
+        if (ratio < 0.30) {
           targetState = 'full';
-        } else if (distToHalf <= distToFull && distToHalf <= distToHidden) {
+        } else if (ratio <= 0.70) {
           targetState = 'half';
         } else {
           targetState = 'hidden';
         }
       }
 
-      // 3. 스냅 시: 목표 상태의 기준 픽셀 Y로 transition 애니메이션을 주어 스르륵 안착시킨 뒤
-      //    완료 시 인라인 transform 리셋 및 setBottomSheetState(targetState) 호출!
+      // 3. 목표 상태 targetState 결정 후 cubic-bezier(0.16, 1, 0.3, 1) 부드러운 스냅 애니메이션 적용 후 완료
       const targetY = getBaseYForState(targetState, panelHeight);
-      panel.style.transition = 'transform 0.34s cubic-bezier(0.2, 0.9, 0.3, 1)';
-      panel.style.transform = `translate3d(0, ${targetY}px, 0)`;
+      panel.style.setProperty('transition', 'transform 0.36s cubic-bezier(0.16, 1, 0.3, 1)', 'important');
+      panel.style.setProperty('transform', `translate3d(0, ${targetY}px, 0)`, 'important');
 
       let snapFinished = false;
       const finalizeSnap = () => {
         if (snapFinished) return;
         snapFinished = true;
         panel.removeEventListener('transitionend', onTransitionEnd);
-        panel.style.transition = '';
+        panel.classList.remove('is-dragging');
+        panel.style.removeProperty('transition');
+        panel.style.removeProperty('transform');
         setBottomSheetState(targetState);
       };
 
@@ -386,16 +387,111 @@
       };
 
       panel.addEventListener('transitionend', onTransitionEnd);
-      // 안전 타이머: 애니메이션 타임아웃(360ms)으로 이벤트 유실 완벽 방어
-      setTimeout(finalizeSnap, 360);
+      setTimeout(finalizeSnap, 380);
     }
 
-    if (window.PointerEvent) {
+    // ==========================================
+    // B. 바텀시트 바디(본문) 최상단 스크롤 시 풀다운 축소 (Pull-down to Collapse)
+    // ==========================================
+    function onBodyTouchStart(e) {
+      if (window.innerWidth > 900) return;
+      if (isDragging) return;
+      if (!e.touches || e.touches.length === 0) return;
+      if (currentSheetState === 'hidden') return;
+
+      const touch = e.touches[0];
+      bodyStartY = touch.clientY;
+      bodyLastDeltaY = 0;
+      isBodyDragging = false;
+      initialScrollTop = contentArea ? contentArea.scrollTop : 0;
+
+      panelHeight = panel.getBoundingClientRect().height || (window.innerHeight - 62);
+      baseY = getBaseYForState(currentSheetState, panelHeight);
+    }
+
+    function onBodyTouchMove(e) {
+      if (window.innerWidth > 900) return;
+      if (isDragging) return;
+      if (!e.touches || e.touches.length === 0) return;
+      if (currentSheetState === 'hidden') return;
+
+      const touch = e.touches[0];
+      const deltaY = touch.clientY - bodyStartY;
+      bodyLastDeltaY = deltaY;
+
+      const currentScrollTop = contentArea ? contentArea.scrollTop : 0;
+
+      // 본문 내부 스크롤이 더 이상 위로 갈 수 없는 최상단 상태(scrollTop <= 0)에서 아래로 당기는 경우
+      if ((initialScrollTop <= 0 || currentScrollTop <= 0) && deltaY > 0) {
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+        isBodyDragging = true;
+        panel.classList.add('is-dragging');
+        panel.style.setProperty('transition', 'none', 'important');
+
+        const currentY = baseY + deltaY * 0.85; // 약간의 안정감 있는 댐핑
+        panel.style.setProperty('transform', `translate3d(0, ${currentY}px, 0)`, 'important');
+      } else if (isBodyDragging && deltaY <= 0) {
+        // 당기다가 위로 다시 올린 경우 원래 위치로 유지
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+        const currentY = baseY + deltaY * 0.25;
+        panel.style.setProperty('transform', `translate3d(0, ${currentY}px, 0)`, 'important');
+      }
+    }
+
+    function onBodyTouchEnd() {
+      if (!isBodyDragging) return;
+      isBodyDragging = false;
+
+      const deltaY = bodyLastDeltaY;
+      let targetState = currentSheetState;
+
+      // 손을 뗐을 때 내려간 거리 deltaY가 60px 이상이면 축소!
+      if (deltaY >= 60) {
+        if (currentSheetState === 'full') {
+          targetState = 'half';
+        } else if (currentSheetState === 'half' || currentSheetState === 'peek') {
+          targetState = 'hidden';
+        }
+      } else {
+        // 60px 미만이면 원래 상태 복귀
+        targetState = currentSheetState;
+      }
+
+      const targetY = getBaseYForState(targetState, panelHeight);
+      panel.style.setProperty('transition', 'transform 0.36s cubic-bezier(0.16, 1, 0.3, 1)', 'important');
+      panel.style.setProperty('transform', `translate3d(0, ${targetY}px, 0)`, 'important');
+
+      let snapFinished = false;
+      const finalizeBodySnap = () => {
+        if (snapFinished) return;
+        snapFinished = true;
+        panel.removeEventListener('transitionend', onBodyTransitionEnd);
+        panel.classList.remove('is-dragging');
+        panel.style.removeProperty('transition');
+        panel.style.removeProperty('transform');
+        setBottomSheetState(targetState);
+      };
+
+      const onBodyTransitionEnd = (evt) => {
+        if (evt && evt.propertyName !== 'transform') return;
+        finalizeBodySnap();
+      };
+
+      panel.addEventListener('transitionend', onBodyTransitionEnd);
+      setTimeout(finalizeBodySnap, 380);
+    }
+
+    // 핸들 터치 이벤트 리스너 등록
+    if (window.PointerEvent && handleTarget) {
       handleTarget.addEventListener('pointerdown', onPointerDown);
       window.addEventListener('pointermove', onPointerMove);
       window.addEventListener('pointerup', onPointerUp);
       window.addEventListener('pointercancel', onPointerUp);
-    } else {
+    } else if (handleTarget) {
       // Touch fallback (구형 브라우저 대응)
       handleTarget.addEventListener('touchstart', (e) => {
         const touch = e.touches[0];
@@ -432,6 +528,14 @@
           clientY: touch ? touch.clientY : undefined
         });
       });
+    }
+
+    // 바텀시트 본문 스크롤 풀다운 제스처 이벤트 리스너 등록
+    if (contentArea) {
+      contentArea.addEventListener('touchstart', onBodyTouchStart, { passive: true });
+      contentArea.addEventListener('touchmove', onBodyTouchMove, { passive: false });
+      contentArea.addEventListener('touchend', onBodyTouchEnd, { passive: true });
+      contentArea.addEventListener('touchcancel', onBodyTouchEnd, { passive: true });
     }
   }
 

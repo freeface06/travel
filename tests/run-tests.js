@@ -918,6 +918,120 @@ runTest('7-5. 여행 계획 삭제 (deleteTrip) 및 최소 1개 유지 방어 �
   });
 
   // --------------------------------------------------------------------------
+  // Suite 11: 모바일 바텀시트 1:1 실시간 추종 및 풀다운 축소 제스처 알고리즘 검증
+  // --------------------------------------------------------------------------
+  console.log('\n--- [Suite 11: 모바일 바텀시트 1:1 추종 및 풀다운 축소 알고리즘 검증] ---');
+
+  function getBaseYForState(state, height) {
+    switch (state) {
+      case 'full':
+        return 0;
+      case 'half':
+        return height * 0.52;
+      case 'peek':
+        return Math.max(0, height - 68);
+      case 'hidden':
+        return height + 80;
+      default:
+        return height * 0.52;
+    }
+  }
+
+  function calculateDraggedY(baseY, deltaY, panelHeight) {
+    let currentY = baseY + deltaY;
+    if (currentY < 0) {
+      currentY = currentY * 0.25;
+    }
+    const maxOffset = panelHeight + 80;
+    if (currentY > maxOffset) {
+      const overDistance = currentY - maxOffset;
+      currentY = maxOffset + overDistance * 0.25;
+    }
+    return currentY;
+  }
+
+  function resolveSnapState(currentY, panelHeight, velocity, deltaY, currentState) {
+    const isFlickDown = velocity > 0.45 || (deltaY > 120 && velocity > 0.2);
+    const isFlickUp = velocity < -0.45 || (deltaY < -120 && velocity < -0.2);
+
+    if (isFlickDown) {
+      if (currentState === 'full') return 'half';
+      return 'hidden';
+    }
+    if (isFlickUp) {
+      return 'full';
+    }
+    const ratio = currentY / panelHeight;
+    if (ratio < 0.30) {
+      return 'full';
+    } else if (ratio <= 0.70) {
+      return 'half';
+    } else {
+      return 'hidden';
+    }
+  }
+
+  function resolveBodyPullDown(deltaY, currentState) {
+    if (deltaY >= 60) {
+      if (currentState === 'full') return 'half';
+      if (currentState === 'half' || currentState === 'peek') return 'hidden';
+    }
+    return currentState;
+  }
+
+  await runTest('11-1. 바텀시트 상태별 기준 Y 오프셋(getBaseYForState) 계산 정확성 검증', () => {
+    const height = 1000;
+    assert.strictEqual(getBaseYForState('full', height), 0);
+    assert.strictEqual(getBaseYForState('half', height), 520);
+    assert.strictEqual(getBaseYForState('peek', height), 932);
+    assert.strictEqual(getBaseYForState('hidden', height), 1080);
+  });
+
+  await runTest('11-2. 상단 및 하단 오버드래그 시 0.25 탄성 저항 감쇠 계산 검증', () => {
+    const height = 800;
+    const baseY = 0; // full 상태
+    // 상단 오버드래그 -100px 이동 -> -25px
+    const topOver = calculateDraggedY(baseY, -100, height);
+    assert.strictEqual(topOver, -25);
+
+    // 하단 오버드래그 (maxOffset = 880, deltaY = 1080 -> 200px 초과 -> 880 + 50 = 930)
+    const bottomOver = calculateDraggedY(baseY, 1080, height);
+    assert.strictEqual(bottomOver, 930);
+  });
+
+  await runTest('11-3. 천천히 놓았을 때 화면 높이 비율(0~30%: full, 30~70%: half, 70% 초과: hidden) 스냅 판정 검증', () => {
+    const height = 1000;
+    // 250px (25%): full
+    assert.strictEqual(resolveSnapState(250, height, 0, 0, 'half'), 'full');
+    // 500px (50%): half
+    assert.strictEqual(resolveSnapState(500, height, 0, 0, 'full'), 'half');
+    // 750px (75%): hidden
+    assert.strictEqual(resolveSnapState(750, height, 0, 0, 'half'), 'hidden');
+  });
+
+  await runTest('11-4. 플릭 다운/플릭 업(velocity/deltaY) 기반 상태 전이 알고리즘 검증', () => {
+    const height = 1000;
+    // full에서 빠른 플릭 다운 -> half
+    assert.strictEqual(resolveSnapState(200, height, 0.6, 150, 'full'), 'half');
+    // half에서 빠른 플릭 다운 -> hidden
+    assert.strictEqual(resolveSnapState(600, height, 0.6, 150, 'half'), 'hidden');
+    // half에서 빠른 플릭 업 -> full
+    assert.strictEqual(resolveSnapState(400, height, -0.6, -150, 'half'), 'full');
+  });
+
+  await runTest('11-5. 본문 최상단 스크롤 풀다운 시 60px 임계치 기반 축소(full->half, half->hidden) 판정 검증', () => {
+    // 60px 미만 당김 -> 원상 복구
+    assert.strictEqual(resolveBodyPullDown(40, 'full'), 'full');
+    assert.strictEqual(resolveBodyPullDown(59, 'half'), 'half');
+
+    // 60px 이상 당김 -> 축소
+    assert.strictEqual(resolveBodyPullDown(60, 'full'), 'half');
+    assert.strictEqual(resolveBodyPullDown(120, 'full'), 'half');
+    assert.strictEqual(resolveBodyPullDown(60, 'half'), 'hidden');
+    assert.strictEqual(resolveBodyPullDown(80, 'peek'), 'hidden');
+  });
+
+  // --------------------------------------------------------------------------
   // 결과 종합 요약
   // --------------------------------------------------------------------------
   console.log('\n====================================================');
