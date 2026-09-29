@@ -1,8 +1,8 @@
 /**
  * @intent Google Maps 메인 지도 엔진 및 Leaflet/OpenStreetMap 무오류 폴백 하이브리드 대화형 지도 렌더러
  *         - Google Maps JavaScript API 동적 주입 및 Places 라이브러리 연동
- *         - loading=async 파라미터 제거 및 importLibrary/Map 클래스 가용성 비동기 폴링 대기 (최대 1500ms)
- *         - 번호 커스텀 SVG 마커 (1, 2, 3...)
+ *         - 전체 일차('all') 동선 한눈에 보기 및 날짜별 고유 색상 독립 Polyline 렌더링 지원
+ *         - 번호 커스텀 SVG 마커 (1, 2, 3...) 및 팝업 내 Day 배지 연동
  *         - 일차별 고유 테마 컬러 Polyline 및 항공편(FLIGHT) 전용 점선 항공로
  *         - InfoWindow/Popup 및 타임라인 카드-마커 양방향 연동
  *         - 지도 직접 클릭 핀 드롭 모드
@@ -96,13 +96,13 @@
   }
 
   /**
-   * @intent 마커 클릭 시 InfoWindow 및 팝업용 미니 일정 카드 템플릿 생성
+   * @intent 마커 클릭 시 InfoWindow 및 팝업용 미니 일정 카드 템플릿 생성 (Day 뱃지 포함)
    * @agent  Gemini/manager-develop
    * @branch feat/mytriplog-core
    * @author @developer_name
    * @date   2026-09-29
    */
-  function createMarkerPopupHtml(item, order, themeColor) {
+  function createMarkerPopupHtml(item, order, themeColor, dayNumber) {
     const catMeta = {
       FLIGHT: '비행기',
       AIRPORT: '공항',
@@ -128,10 +128,13 @@
       : (item.flightNo || item.transitMode || item.menuRecommendation || item.address || '');
 
     const costText = Number(item.cost) > 0 ? `${Number(item.cost).toLocaleString()}원` : '';
+    const targetDay = dayNumber || item.day;
+    const dayBadgeHtml = targetDay ? `<span class="popup-day-pill" style="background:${themeColor || '#2563eb'};">Day ${targetDay}</span>` : '';
 
     return `
       <div class="map-item-popup">
         <div class="popup-header">
+          ${dayBadgeHtml}
           <span class="popup-order-badge" style="background-color:${themeColor || '#2563eb'};">${order}</span>
           <span class="popup-cat-badge">${escapeHtml(catLabel)}</span>
           <strong class="popup-title">${escapeHtml(item.title || '일정')}</strong>
@@ -523,7 +526,7 @@
     }
 
     /**
-     * @intent 특정 일차(Day)의 아이템 렌더링 (Google Maps 및 Leaflet 하이브리드 지원)
+     * @intent 특정 일차(Day) 또는 전체 일차('all')의 아이템 렌더링 (Google Maps 및 Leaflet 하이브리드 지원, 날짜별 독립 동선)
      * @agent  Gemini/manager-develop
      * @branch feat/mytriplog-core
      * @author @developer_name
@@ -537,151 +540,330 @@
       }
       this.clearLayers();
 
-      const dayItems = (items || []).filter((it) => Number(it.day) === Number(dayNumber));
-      const validItems = dayItems.filter((it) => it.lat != null && it.lng != null && !isNaN(it.lat) && !isNaN(it.lng));
+      const isAllDays = dayNumber === 'all' || dayNumber === 'ALL' || dayNumber === 0 || !dayNumber;
 
-      if (validItems.length === 0) return;
+      if (!isAllDays) {
+        // 단일 일차 모드
+        const dayItems = (items || []).filter((it) => Number(it.day) === Number(dayNumber));
+        const validItems = dayItems.filter((it) => it.lat != null && it.lng != null && !isNaN(it.lat) && !isNaN(it.lng));
 
-      const themeColor = getDayColor(dayNumber);
-      const points = [];
+        if (validItems.length === 0) return;
 
-      validItems.forEach((item, index) => {
-        const order = index + 1;
-        const lat = Number(item.lat);
-        const lng = Number(item.lng);
-        const isSelected = item.id === selectedItemId;
+        const themeColor = getDayColor(dayNumber);
+        const points = [];
 
-        points.push([lat, lng]);
+        validItems.forEach((item, index) => {
+          const order = index + 1;
+          const lat = Number(item.lat);
+          const lng = Number(item.lng);
+          const isSelected = item.id === selectedItemId;
 
-        if (this.engine === 'google') {
-          const svgStr = createNumberedSvgString(order, themeColor, isSelected);
-          const iconObj = {
-            url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svgStr)}`,
-            scaledSize: new google.maps.Size(isSelected ? 36 : 30, isSelected ? 46 : 40),
-            anchor: new google.maps.Point(isSelected ? 18 : 15, isSelected ? 46 : 40)
-          };
-
-          const marker = new google.maps.Marker({
-            position: { lat, lng },
-            map: this.map,
-            title: item.title || `장소 ${order}`,
-            icon: iconObj,
-            zIndex: isSelected ? 900 : 100 + order
-          });
-
-          const popupHtml = createMarkerPopupHtml(item, order, themeColor);
-          marker.popupHtml = popupHtml;
-
-          marker.addListener('click', () => {
-            if (this.infoWindow) {
-              this.infoWindow.setContent(createMarkerPopupHtml(item, order, themeColor));
-              this.infoWindow.open(this.map, marker);
-            }
-            if (this.onMarkerClickListener) this.onMarkerClickListener(item.id);
-          });
-
-          if (isSelected && this.infoWindow) {
-            this.infoWindow.setContent(popupHtml);
-            this.infoWindow.open(this.map, marker);
-          }
-
-          this.markers.push(marker);
-          this.markerMap.set(item.id, marker);
-        } else if (this.engine === 'leaflet') {
-          const svgStr = createNumberedSvgString(order, themeColor, isSelected);
-          const icon = L.divIcon({
-            className: 'numbered-custom-pin',
-            html: svgStr,
-            iconSize: [isSelected ? 36 : 30, isSelected ? 46 : 40],
-            iconAnchor: [isSelected ? 18 : 15, isSelected ? 46 : 40],
-            popupAnchor: [0, -40]
-          });
-
-          const marker = L.marker([lat, lng], { icon, zIndexOffset: isSelected ? 1000 : order * 10 }).addTo(this.map);
-          const popupHtml = createMarkerPopupHtml(item, order, themeColor);
-          marker.popupHtml = popupHtml;
-          marker.bindPopup(popupHtml, { minWidth: 200, className: 'leaflet-custom-popup' });
-
-          marker.on('click', () => {
-            marker.openPopup();
-            if (this.onMarkerClickListener) this.onMarkerClickListener(item.id);
-          });
-
-          if (isSelected) {
-            marker.openPopup();
-          }
-
-          this.markers.push(marker);
-          this.markerMap.set(item.id, marker);
-        }
-      });
-
-      // 경로선(Polyline) 렌더링
-      if (points.length >= 2) {
-        if (this.engine === 'google') {
-          const path = points.map((p) => ({ lat: p[0], lng: p[1] }));
-          const polyline = new google.maps.Polyline({
-            path,
-            geodesic: true,
-            strokeColor: themeColor,
-            strokeOpacity: 0.85,
-            strokeWeight: 4,
-            map: this.map
-          });
-          this.polylines.push(polyline);
-        } else if (this.engine === 'leaflet') {
-          const polyline = L.polyline(points, {
-            color: themeColor,
-            weight: 4,
-            opacity: 0.85,
-            lineJoin: 'round'
-          }).addTo(this.map);
-          this.polylines.push(polyline);
-        }
-      }
-
-      // 비행기(FLIGHT) 전용 점선 항공로 렌더링
-      validItems.forEach((item) => {
-        if (item.category === 'FLIGHT' && item.destLat && item.destLng) {
-          const startPt = [Number(item.lat), Number(item.lng)];
-          const endPt = [Number(item.destLat), Number(item.destLng)];
+          points.push([lat, lng]);
 
           if (this.engine === 'google') {
-            const flightPoly = new google.maps.Polyline({
-              path: [{ lat: startPt[0], lng: startPt[1] }, { lat: endPt[0], lng: endPt[1] }],
+            const svgStr = createNumberedSvgString(order, themeColor, isSelected);
+            const iconObj = {
+              url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svgStr)}`,
+              scaledSize: new google.maps.Size(isSelected ? 36 : 30, isSelected ? 46 : 40),
+              anchor: new google.maps.Point(isSelected ? 18 : 15, isSelected ? 46 : 40)
+            };
+
+            const marker = new google.maps.Marker({
+              position: { lat, lng },
+              map: this.map,
+              title: item.title || `장소 ${order}`,
+              icon: iconObj,
+              zIndex: isSelected ? 900 : 100 + order
+            });
+
+            const popupHtml = createMarkerPopupHtml(item, order, themeColor, dayNumber);
+            marker.popupHtml = popupHtml;
+
+            marker.addListener('click', () => {
+              if (this.infoWindow) {
+                this.infoWindow.setContent(createMarkerPopupHtml(item, order, themeColor, dayNumber));
+                this.infoWindow.open(this.map, marker);
+              }
+              if (this.onMarkerClickListener) this.onMarkerClickListener(item.id);
+            });
+
+            if (isSelected && this.infoWindow) {
+              this.infoWindow.setContent(popupHtml);
+              this.infoWindow.open(this.map, marker);
+            }
+
+            this.markers.push(marker);
+            this.markerMap.set(item.id, marker);
+          } else if (this.engine === 'leaflet') {
+            const svgStr = createNumberedSvgString(order, themeColor, isSelected);
+            const icon = L.divIcon({
+              className: 'numbered-custom-pin',
+              html: svgStr,
+              iconSize: [isSelected ? 36 : 30, isSelected ? 46 : 40],
+              iconAnchor: [isSelected ? 18 : 15, isSelected ? 46 : 40],
+              popupAnchor: [0, -40]
+            });
+
+            const marker = L.marker([lat, lng], { icon, zIndexOffset: isSelected ? 1000 : order * 10 }).addTo(this.map);
+            const popupHtml = createMarkerPopupHtml(item, order, themeColor, dayNumber);
+            marker.popupHtml = popupHtml;
+            marker.bindPopup(popupHtml, { minWidth: 200, className: 'leaflet-custom-popup' });
+
+            marker.on('click', () => {
+              marker.openPopup();
+              if (this.onMarkerClickListener) this.onMarkerClickListener(item.id);
+            });
+
+            if (isSelected) {
+              marker.openPopup();
+            }
+
+            this.markers.push(marker);
+            this.markerMap.set(item.id, marker);
+          }
+        });
+
+        // 경로선(Polyline) 렌더링
+        if (points.length >= 2) {
+          if (this.engine === 'google') {
+            const path = points.map((p) => ({ lat: p[0], lng: p[1] }));
+            const polyline = new google.maps.Polyline({
+              path,
               geodesic: true,
-              strokeColor: '#0284c7',
-              strokeOpacity: 0,
-              icons: [{
-                icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.8, scale: 3, strokeColor: '#0284c7' },
-                offset: '0',
-                repeat: '12px'
-              }],
+              strokeColor: themeColor,
+              strokeOpacity: 0.85,
+              strokeWeight: 4,
               map: this.map
             });
-            this.polylines.push(flightPoly);
+            this.polylines.push(polyline);
           } else if (this.engine === 'leaflet') {
-            const flightPoly = L.polyline([startPt, endPt], {
-              color: '#0284c7',
-              weight: 3,
-              opacity: 0.8,
-              dashArray: '8, 8'
+            const polyline = L.polyline(points, {
+              color: themeColor,
+              weight: 4,
+              opacity: 0.85,
+              lineJoin: 'round'
             }).addTo(this.map);
-            this.polylines.push(flightPoly);
+            this.polylines.push(polyline);
           }
         }
-      });
 
-      // 지도 범위 자동 조정 (일차가 변경되었거나 첫 렌더링 시에만 실행하여 사용자 줌/선택 상태 유지)
-      const dayChanged = this.currentRenderedDay !== dayNumber;
-      this.currentRenderedDay = dayNumber;
-      if (points.length > 0 && dayChanged) {
-        if (this.engine === 'google') {
-          const bounds = new google.maps.LatLngBounds();
-          points.forEach((p) => bounds.extend({ lat: p[0], lng: p[1] }));
-          this.map.fitBounds(bounds, 40);
-        } else if (this.engine === 'leaflet') {
-          this.map.fitBounds(points, { padding: [40, 40], maxZoom: 15 });
+        // 비행기(FLIGHT) 전용 점선 항공로 렌더링
+        validItems.forEach((item) => {
+          if (item.category === 'FLIGHT' && item.destLat && item.destLng) {
+            const startPt = [Number(item.lat), Number(item.lng)];
+            const endPt = [Number(item.destLat), Number(item.destLng)];
+
+            if (this.engine === 'google') {
+              const flightPoly = new google.maps.Polyline({
+                path: [{ lat: startPt[0], lng: startPt[1] }, { lat: endPt[0], lng: endPt[1] }],
+                geodesic: true,
+                strokeColor: '#0284c7',
+                strokeOpacity: 0,
+                icons: [{
+                  icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.8, scale: 3, strokeColor: '#0284c7' },
+                  offset: '0',
+                  repeat: '12px'
+                }],
+                map: this.map
+              });
+              this.polylines.push(flightPoly);
+            } else if (this.engine === 'leaflet') {
+              const flightPoly = L.polyline([startPt, endPt], {
+                color: '#0284c7',
+                weight: 3,
+                opacity: 0.8,
+                dashArray: '8, 8'
+              }).addTo(this.map);
+              this.polylines.push(flightPoly);
+            }
+          }
+        });
+
+        // 지도 범위 자동 조정
+        const dayChanged = this.currentRenderedDay !== dayNumber;
+        this.currentRenderedDay = dayNumber;
+        if (points.length > 0 && dayChanged) {
+          if (this.engine === 'google') {
+            const bounds = new google.maps.LatLngBounds();
+            points.forEach((p) => bounds.extend({ lat: p[0], lng: p[1] }));
+            this.map.fitBounds(bounds, 40);
+          } else if (this.engine === 'leaflet') {
+            this.map.fitBounds(points, { padding: [40, 40], maxZoom: 15 });
+          }
+        }
+      } else {
+        // 전체 일차 모드 (isAllDays)
+        const validItems = (items || []).filter((it) => it.lat != null && it.lng != null && !isNaN(it.lat) && !isNaN(it.lng));
+        if (validItems.length === 0) return;
+
+        // Day별 그룹화
+        const dayGroups = {};
+        validItems.forEach((it) => {
+          const d = Number(it.day) || 1;
+          if (!dayGroups[d]) dayGroups[d] = [];
+          dayGroups[d].push(it);
+        });
+
+        // Day 그룹 번호 오름차순 정렬 및 각 Day 내 시간순 정렬
+        const sortedDays = Object.keys(dayGroups).map(Number).sort((a, b) => a - b);
+        sortedDays.forEach((d) => {
+          dayGroups[d].sort((a, b) => {
+            const timeA = a.time || (a.category === 'FLIGHT' ? (a.flightType === 'ARRIVAL' ? a.arrivalTime : a.departureTime) : (a.category === 'HOTEL' ? a.checkInTime : '')) || '';
+            const timeB = b.time || (b.category === 'FLIGHT' ? (b.flightType === 'ARRIVAL' ? b.arrivalTime : b.departureTime) : (b.category === 'HOTEL' ? b.checkInTime : '')) || '';
+            if (timeA && timeB) return timeA.localeCompare(timeB);
+            if (timeA && !timeB) return -1;
+            if (!timeA && timeB) return 1;
+            return 0;
+          });
+        });
+
+        const allPoints = [];
+
+        sortedDays.forEach((d) => {
+          const dayColor = getDayColor(d);
+          const dayPoints = [];
+          const group = dayGroups[d];
+
+          group.forEach((item, index) => {
+            const order = index + 1;
+            const lat = Number(item.lat);
+            const lng = Number(item.lng);
+            const isSelected = item.id === selectedItemId;
+
+            allPoints.push([lat, lng]);
+            dayPoints.push([lat, lng]);
+
+            if (this.engine === 'google') {
+              const svgStr = createNumberedSvgString(order, dayColor, isSelected);
+              const iconObj = {
+                url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svgStr)}`,
+                scaledSize: new google.maps.Size(isSelected ? 36 : 30, isSelected ? 46 : 40),
+                anchor: new google.maps.Point(isSelected ? 18 : 15, isSelected ? 46 : 40)
+              };
+
+              const marker = new google.maps.Marker({
+                position: { lat, lng },
+                map: this.map,
+                title: `[Day ${d}] ${item.title || `장소 ${order}`}`,
+                icon: iconObj,
+                zIndex: isSelected ? 900 : 100 + order
+              });
+
+              const popupHtml = createMarkerPopupHtml(item, order, dayColor, d);
+              marker.popupHtml = popupHtml;
+
+              marker.addListener('click', () => {
+                if (this.infoWindow) {
+                  this.infoWindow.setContent(createMarkerPopupHtml(item, order, dayColor, d));
+                  this.infoWindow.open(this.map, marker);
+                }
+                if (this.onMarkerClickListener) this.onMarkerClickListener(item.id);
+              });
+
+              if (isSelected && this.infoWindow) {
+                this.infoWindow.setContent(popupHtml);
+                this.infoWindow.open(this.map, marker);
+              }
+
+              this.markers.push(marker);
+              this.markerMap.set(item.id, marker);
+            } else if (this.engine === 'leaflet') {
+              const svgStr = createNumberedSvgString(order, dayColor, isSelected);
+              const icon = L.divIcon({
+                className: 'numbered-custom-pin',
+                html: svgStr,
+                iconSize: [isSelected ? 36 : 30, isSelected ? 46 : 40],
+                iconAnchor: [isSelected ? 18 : 15, isSelected ? 46 : 40],
+                popupAnchor: [0, -40]
+              });
+
+              const marker = L.marker([lat, lng], { icon, zIndexOffset: isSelected ? 1000 : order * 10 }).addTo(this.map);
+              const popupHtml = createMarkerPopupHtml(item, order, dayColor, d);
+              marker.popupHtml = popupHtml;
+              marker.bindPopup(popupHtml, { minWidth: 200, className: 'leaflet-custom-popup' });
+
+              marker.on('click', () => {
+                marker.openPopup();
+                if (this.onMarkerClickListener) this.onMarkerClickListener(item.id);
+              });
+
+              if (isSelected) {
+                marker.openPopup();
+              }
+
+              this.markers.push(marker);
+              this.markerMap.set(item.id, marker);
+            }
+          });
+
+          // 날짜별 독립 Polyline 렌더링 (해당 Day 고유 색상 적용)
+          if (dayPoints.length >= 2) {
+            if (this.engine === 'google') {
+              const path = dayPoints.map((p) => ({ lat: p[0], lng: p[1] }));
+              const polyline = new google.maps.Polyline({
+                path,
+                geodesic: true,
+                strokeColor: dayColor,
+                strokeOpacity: 0.85,
+                strokeWeight: 4,
+                map: this.map
+              });
+              this.polylines.push(polyline);
+            } else if (this.engine === 'leaflet') {
+              const polyline = L.polyline(dayPoints, {
+                color: dayColor,
+                weight: 4,
+                opacity: 0.85,
+                lineJoin: 'round'
+              }).addTo(this.map);
+              this.polylines.push(polyline);
+            }
+          }
+        });
+
+        // 비행기(FLIGHT) 전용 점선 항공로 렌더링 (모든 일차 대상)
+        validItems.forEach((item) => {
+          if (item.category === 'FLIGHT' && item.destLat && item.destLng) {
+            const startPt = [Number(item.lat), Number(item.lng)];
+            const endPt = [Number(item.destLat), Number(item.destLng)];
+
+            if (this.engine === 'google') {
+              const flightPoly = new google.maps.Polyline({
+                path: [{ lat: startPt[0], lng: startPt[1] }, { lat: endPt[0], lng: endPt[1] }],
+                geodesic: true,
+                strokeColor: '#0284c7',
+                strokeOpacity: 0,
+                icons: [{
+                  icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.8, scale: 3, strokeColor: '#0284c7' },
+                  offset: '0',
+                  repeat: '12px'
+                }],
+                map: this.map
+              });
+              this.polylines.push(flightPoly);
+            } else if (this.engine === 'leaflet') {
+              const flightPoly = L.polyline([startPt, endPt], {
+                color: '#0284c7',
+                weight: 3,
+                opacity: 0.8,
+                dashArray: '8, 8'
+              }).addTo(this.map);
+              this.polylines.push(flightPoly);
+            }
+          }
+        });
+
+        // 지도 범위 자동 조정 (모든 일차 전체 좌표 포함)
+        const dayChanged = this.currentRenderedDay !== dayNumber;
+        this.currentRenderedDay = dayNumber;
+        if (allPoints.length > 0 && dayChanged) {
+          if (this.engine === 'google') {
+            const bounds = new google.maps.LatLngBounds();
+            allPoints.forEach((p) => bounds.extend({ lat: p[0], lng: p[1] }));
+            this.map.fitBounds(bounds, 40);
+          } else if (this.engine === 'leaflet') {
+            this.map.fitBounds(allPoints, { padding: [40, 40], maxZoom: 15 });
+          }
         }
       }
     }

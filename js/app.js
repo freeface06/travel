@@ -1,5 +1,5 @@
 /**
- * @intent 헤더 더보기 드롭다운 메뉴에서 불필요해진 Maps 설정 및 클라우드 동기화 메뉴 제거, 3대 핵심 메뉴 정돈
+ * @intent 헤더 메뉴 및 타임라인/지도 동선 뷰어 - 전체 일차('all') 동선 및 타임라인 한눈에 보기 지원
  * @agent  Gemini/manager-develop
  * @branch feat/mytriplog-core
  * @author @developer_name
@@ -10,7 +10,7 @@
   'use strict';
 
   const { store } = TripStore;
-  const { mapManager } = TripMap;
+  const { mapManager, getDayColor } = TripMap;
   const { formManager, escapeHtml, CATEGORIES } = TripForms;
   const { calculateSettlements, formatAmount } = TripExpense;
   const { generateShareUrl, parseShareHash, exportTripAsJson, importTripFromJsonFile, copyToClipboard } = TripShare;
@@ -712,9 +712,20 @@
     const maxDays = Math.max(3, getMaxDays(trip.items));
     dom.daySelectorBar.innerHTML = '';
 
+    // 전체 칩 (맨 앞)
+    const isAllSelected = selectedDay === 'all' || selectedDay === 'ALL';
+    const allChip = document.createElement('button');
+    allChip.className = `day-chip chip-all${isAllSelected ? ' active' : ''}`;
+    allChip.title = '전체 일정 및 모든 날짜 동선 한눈에 보기';
+    allChip.innerHTML = `${getIcon('MAP', { size: 14 })} <span>전체</span>`;
+    allChip.addEventListener('click', () => {
+      store.setSelectedDay('all');
+    });
+    dom.daySelectorBar.appendChild(allChip);
+
     for (let d = 1; d <= maxDays; d++) {
       const chip = document.createElement('button');
-      chip.className = `day-chip${d === selectedDay ? ' active' : ''}`;
+      chip.className = `day-chip${!isAllSelected && Number(d) === Number(selectedDay) ? ' active' : ''}`;
 
       const dateLabel = formatDayDateLabel(meta.startDate, d);
       const text = dateLabel ? `Day ${d} ${dateLabel}` : `Day ${d}`;
@@ -827,10 +838,18 @@
    * @param {string|null} selectedItemId
    */
   function renderTimelinePanel(trip, selectedDay, selectedItemId) {
-    const dayItems = (trip.items || [])
-      .filter((item) => Number(item.day) === Number(selectedDay))
+    const meta = trip.metadata || {};
+    const isAllDays = selectedDay === 'all' || selectedDay === 'ALL';
+
+    const itemsToRender = (trip.items || [])
+      .filter((item) => (isAllDays ? true : Number(item.day) === Number(selectedDay)))
       .slice()
       .sort((a, b) => {
+        if (isAllDays) {
+          const dayA = Number(a.day) || 1;
+          const dayB = Number(b.day) || 1;
+          if (dayA !== dayB) return dayA - dayB;
+        }
         const timeA = a.time || (a.category === 'FLIGHT' ? (a.flightType === 'ARRIVAL' ? a.arrivalTime : a.departureTime) : (a.category === 'HOTEL' ? a.checkInTime : '')) || '';
         const timeB = b.time || (b.category === 'FLIGHT' ? (b.flightType === 'ARRIVAL' ? b.arrivalTime : b.departureTime) : (b.category === 'HOTEL' ? b.checkInTime : '')) || '';
         if (timeA && timeB) {
@@ -841,10 +860,14 @@
         return 0;
       });
 
+    const toolbarTitle = isAllDays
+      ? `전체 여행 일정 (${itemsToRender.length}개)`
+      : `Day ${selectedDay} 일정 (${itemsToRender.length}개)`;
+
     let html = `
       <div class="timeline-toolbar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
         <div style="font-weight:700; font-size:0.95rem; color:var(--text-main);">
-          Day ${selectedDay} 일정 (${dayItems.length}개)
+          ${toolbarTitle}
         </div>
         <button id="btn-add-item-day" class="btn btn-primary btn-sm">
           ${getIcon('PLUS', { size: 14 })} <span>일정 추가</span>
@@ -852,26 +875,61 @@
       </div>
     `;
 
-    if (dayItems.length === 0) {
+    const addDefaultDay = isAllDays ? 1 : (Number(selectedDay) || 1);
+
+    if (itemsToRender.length === 0) {
+      const emptyMessage = isAllDays
+        ? '등록된 여행 일정이 없습니다.'
+        : `등록된 Day ${selectedDay} 일정이 없습니다.`;
       html += `
         <div class="empty-timeline-state">
           ${getIcon('ROUTE', { size: 40, color: 'var(--gray-400)' })}
-          <div>등록된 Day ${selectedDay} 일정이 없습니다.</div>
+          <div>${emptyMessage}</div>
           <button id="btn-empty-add-item" class="btn btn-outline btn-sm">
             ${getIcon('PLUS', { size: 14 })} <span>첫 일정 추가하기</span>
           </button>
         </div>
       `;
       dom.panelContentArea.innerHTML = html;
-      document.getElementById('btn-add-item-day')?.addEventListener('click', () => openItemModal());
-      document.getElementById('btn-empty-add-item')?.addEventListener('click', () => openItemModal());
+      document.getElementById('btn-add-item-day')?.addEventListener('click', () => openItemModal({ day: addDefaultDay }));
+      document.getElementById('btn-empty-add-item')?.addEventListener('click', () => openItemModal({ day: addDefaultDay }));
       return;
+    }
+
+    // 일차별 일정 개수 집계 (전체 보기 모드용)
+    const dayItemCounts = {};
+    if (isAllDays) {
+      itemsToRender.forEach((it) => {
+        const d = Number(it.day) || 1;
+        dayItemCounts[d] = (dayItemCounts[d] || 0) + 1;
+      });
     }
 
     html += '<div class="timeline-flow-wrapper">';
 
-    dayItems.forEach((item, index) => {
-      const order = index + 1;
+    let currentRenderDay = null;
+    let dayOrder = 0;
+
+    itemsToRender.forEach((item, index) => {
+      const itemDay = Number(item.day) || 1;
+      const dayColor = getDayColor(itemDay);
+
+      // 전체 보기 모드에서 Day 전환 시 구분 헤더 렌더링
+      if (isAllDays && itemDay !== currentRenderDay) {
+        currentRenderDay = itemDay;
+        dayOrder = 0;
+        const count = dayItemCounts[itemDay] || 0;
+        html += `
+          <div class="timeline-day-divider">
+            <span class="day-divider-pill" style="background:${dayColor};">Day ${itemDay}</span>
+            <span class="day-divider-date">${formatDayDateLabel(meta.startDate, itemDay)}</span>
+            <span class="day-divider-count">${count}개 일정</span>
+          </div>
+        `;
+      }
+
+      dayOrder++;
+      const order = isAllDays ? dayOrder : (index + 1);
       const cat = CATEGORIES[item.category] || { label: '기타', icon: 'NOTE', color: '#64748b' };
       const isActive = item.id === selectedItemId;
       const activeClass = isActive ? ' is-active' : '';
@@ -884,12 +942,13 @@
       html += `
         <div class="timeline-flow-item${activeClass}" data-id="${escapeHtml(item.id)}">
           <div class="timeline-flow-lane">
-            <span class="card-order-marker">${order}</span>
+            <span class="card-order-marker" style="${isAllDays ? `border-color:${dayColor}; color:${dayColor};` : ''}">${order}</span>
             <div class="timeline-through-line"></div>
           </div>
           <div class="timeline-item-card${activeClass}" data-id="${escapeHtml(item.id)}">
             <div class="card-header-row">
               <div class="card-header-left">
+                ${isAllDays ? `<span class="category-tag day-pill-tag" style="background:${dayColor}; color:#ffffff; font-weight:700;">Day ${itemDay}</span>` : ''}
                 <span class="category-tag cat-${(item.category || '').toLowerCase()}">
                   ${getIcon(cat.icon, { size: 14 })} <span>${cat.label}</span>
                 </span>
@@ -950,7 +1009,7 @@
     dom.panelContentArea.innerHTML = html;
 
     // 이벤트 바인딩
-    document.getElementById('btn-add-item-day')?.addEventListener('click', () => openItemModal());
+    document.getElementById('btn-add-item-day')?.addEventListener('click', () => openItemModal({ day: addDefaultDay }));
 
     // 카드 클릭 이벤트 (지도 이동 및 하이라이트)
     dom.panelContentArea.querySelectorAll('.timeline-item-card').forEach((card) => {
@@ -1418,15 +1477,22 @@
     const trip = store.getState().trip;
     const participants = (trip.metadata && trip.metadata.participants) || [];
 
-    const isEdit = Boolean(itemToEdit);
+    const isEdit = Boolean(itemToEdit && itemToEdit.id);
     const modalTitle = isEdit ? '일정 수정하기' : '새 여행 일정 추가';
 
-    const defaultData = itemToEdit || {
-      day: store.getState().selectedDay || 1,
+    const selDay = store.getState().selectedDay;
+    const fallbackDay = (selDay === 'all' || selDay === 'ALL' ? 1 : selDay) || 1;
+
+    const defaultData = (itemToEdit && itemToEdit.id) ? itemToEdit : Object.assign({
+      day: fallbackDay,
       category: 'ATTRACTION',
       currency: trip.metadata.baseCurrency || 'KRW',
       payer: participants[0] || '공통'
-    };
+    }, itemToEdit || {});
+
+    if (defaultData.day === 'all' || defaultData.day === 'ALL' || !defaultData.day) {
+      defaultData.day = 1;
+    }
 
     const formHtml = formManager.renderFormHtml(defaultData, participants);
     openModal(modalTitle, formHtml);

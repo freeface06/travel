@@ -1,5 +1,5 @@
 /**
- * @intent 정산 엔진, 환율 환산, 스토어 상태 전이 종합 단위 테스트 스크립트
+ * @intent 정산 엔진, 환율 환산, 스토어 상태 전이 및 전체 일차('all') 지도 동선 종합 단위 테스트 스크립트
  * @agent  Gemini/manager-develop
  * @branch feat/mytriplog-core
  * @author @developer_name
@@ -1061,6 +1061,131 @@ runTest('7-5. 여행 계획 삭제 (deleteTrip) 및 최소 1개 유지 방어 �
     // full 상태에서 위로 올렸을 때: full 유지
     assert.strictEqual(resolveBodySwipe(-50, 'full'), 'full');
     assert.strictEqual(resolveBodySwipe(-120, 'full'), 'full');
+  });
+
+  // --------------------------------------------------------------------------
+  // 12. 전체 보기 (All Days) 스토어 및 지도 동선 렌더링 검증
+  // --------------------------------------------------------------------------
+  console.log('\n--- [Suite 12: 전체 보기 (All Days) 스토어 및 지도 동선 렌더링 검증] ---');
+
+  await runTest('12-1. store.setSelectedDay(\'all\') 상태 저장 및 selectedDay === \'all\' 유지 검증', () => {
+    TripStore.store.setSelectedDay('all');
+    assert.strictEqual(TripStore.store.getState().selectedDay, 'all');
+
+    TripStore.store.setSelectedDay('ALL');
+    assert.strictEqual(TripStore.store.getState().selectedDay, 'all');
+
+    // 숫자 전환 검증
+    TripStore.store.setSelectedDay(3);
+    assert.strictEqual(TripStore.store.getState().selectedDay, 3);
+  });
+
+  await runTest('12-2. store.addItem 시 selectedDay === \'all\'일 때 기본 Day 1 배정 검증', () => {
+    TripStore.store.setSelectedDay('all');
+    const itemWithoutDay = {
+      title: '전체 보기 상태에서 추가된 일정',
+      category: 'ATTRACTION',
+      cost: 15000
+    };
+    const added = TripStore.store.addItem(itemWithoutDay);
+    assert.strictEqual(added.day, 1, 'selectedDay가 all일 때 day가 없는 아이템은 1일차로 자동 배정되어야 함');
+    assert.strictEqual(Number(added.day), 1);
+  });
+
+  await runTest('12-3. map.js의 render 함수에서 dayNumber = \'all\'일 때 전체 일차 아이템 필터링 및 날짜별 독립 Polyline 생성 검증', () => {
+    const testMapManager = new TripMap.TripMapManager();
+    const addedMarkers = [];
+    const addedPolylines = [];
+    let fittedBounds = null;
+
+    global.L = {
+      divIcon: (opts) => ({ type: 'divIcon', opts }),
+      marker: (latlng, opts) => {
+        const m = {
+          latlng,
+          opts,
+          bindPopup: () => m,
+          on: () => m,
+          openPopup: () => m,
+          addTo: (map) => { addedMarkers.push(m); return m; }
+        };
+        return m;
+      },
+      polyline: (pts, opts) => {
+        const p = {
+          pts,
+          opts,
+          addTo: (map) => { addedPolylines.push(p); return p; }
+        };
+        return p;
+      }
+    };
+
+    testMapManager.engine = 'leaflet';
+    testMapManager.map = {
+      removeLayer: () => {},
+      fitBounds: (bounds) => { fittedBounds = bounds; }
+    };
+
+    const testItems = [
+      { id: 'item-d1-1', day: 1, title: 'Day1 장소1', lat: 35.6895, lng: 139.6917, time: '10:00' },
+      { id: 'item-d1-2', day: 1, title: 'Day1 장소2', lat: 35.6900, lng: 139.6920, time: '14:00' },
+      { id: 'item-d2-1', day: 2, title: 'Day2 장소1', lat: 35.7000, lng: 139.7000, time: '11:00' },
+      { id: 'item-d2-2', day: 2, title: 'Day2 장소2', lat: 35.7100, lng: 139.7100, time: '15:00' },
+      { id: 'item-d3-single', day: 3, title: 'Day3 단일', lat: 35.7200, lng: 139.7200, time: '09:00' }
+    ];
+
+    testMapManager.render(testItems, 'all');
+
+    // 마커가 5개 모두 생성되었는지 확인
+    assert.strictEqual(testMapManager.markers.length, 5, '전체 5개 아이템의 마커가 생성되어야 함');
+
+    // Day 1과 Day 2는 좌표가 2개 이상이므로 각각 독립 Polyline이 생성되고, Day 3은 1개이므로 Polyline 없음 -> 총 2개 Polyline
+    assert.strictEqual(testMapManager.polylines.length, 2, '2개 이상 좌표를 가진 Day 1과 Day 2에 대해 각각 1개씩 총 2개의 독립 Polyline이 생성되어야 함');
+
+    // Day 1의 Polyline 색상 검증
+    assert.strictEqual(testMapManager.polylines[0].opts.color, TripMap.getDayColor(1));
+    // Day 2의 Polyline 색상 검증
+    assert.strictEqual(testMapManager.polylines[1].opts.color, TripMap.getDayColor(2));
+
+    // fitBounds에 5개 좌표 모두 전달되었는지 검증
+    assert(Array.isArray(fittedBounds), 'fitBounds에 좌표 배열이 전달되어야 함');
+    assert.strictEqual(fittedBounds.length, 5);
+  });
+
+  await runTest('12-4. map.js의 createMarkerPopupHtml에 Day N 배지 렌더링 검증', () => {
+    const item = {
+      id: 'test-item-1',
+      day: 2,
+      title: '도쿄 타워',
+      category: 'ATTRACTION',
+      cost: 3000
+    };
+    const htmlWithDayArg = TripMap.createMarkerPopupHtml(item, 1, '#059669', 2);
+    assert(htmlWithDayArg.includes('popup-day-pill'), 'Day 뱃지 클래스가 포함되어야 함');
+    assert(htmlWithDayArg.includes('Day 2'), 'Day 2 텍스트가 뱃지에 표시되어야 함');
+    assert(htmlWithDayArg.includes('background:#059669'), '뱃지에 테마 색상이 적용되어야 함');
+
+    // dayNumber 인자가 생략되어도 item.day에서 자동 추출되는지 검증
+    const htmlWithItemDay = TripMap.createMarkerPopupHtml(item, 1, '#059669');
+    assert(htmlWithItemDay.includes('popup-day-pill'));
+    assert(htmlWithItemDay.includes('Day 2'));
+  });
+
+  await runTest('12-5. 전체 일차 신규 코드 및 파일 내 Strict No-Emoji 부재 검증', () => {
+    const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u;
+    const targetFiles = [
+      path.join(__dirname, '../js/store.js'),
+      path.join(__dirname, '../js/map.js'),
+      path.join(__dirname, '../js/app.js'),
+      path.join(__dirname, '../css/components.css'),
+      path.join(__dirname, '../index.html')
+    ];
+
+    targetFiles.forEach((file) => {
+      const content = fs.readFileSync(file, 'utf8');
+      assert.strictEqual(emojiRegex.test(content), false, `파일 [${path.basename(file)}]에 유니코드 이모지가 포함되어선 안 됩니다.`);
+    });
   });
 
   // --------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 /**
  * @intent 중앙 상태 관리자(Store) - 옵저버 패턴 및 LocalStorage 영구 동기화
+ *         - 전체 일차('all') 선택 상태 지원 및 신규 일정 추가 시 1일차 안전 기본 배정
  * @agent  Gemini/manager-develop
  * @branch feat/mytriplog-core
  * @author @developer_name
@@ -608,14 +609,18 @@
     }
 
     /**
-     * @intent 일차(Day) 선택 변경
+     * @intent 일차(Day) 선택 변경 - 특정 일차(숫자) 또는 전체 보기('all') 지원
      * @agent  Gemini/manager-develop
      * @branch feat/mytriplog-core
      * @author @developer_name
      * @date   2026-09-29
      */
     setSelectedDay(day) {
-      this.state.selectedDay = Number(day) || 1;
+      if (day === 'all' || day === 'ALL') {
+        this.state.selectedDay = 'all';
+      } else {
+        this.state.selectedDay = Number(day) || 1;
+      }
       this.notify();
     }
 
@@ -673,7 +678,7 @@
     }
 
     /**
-     * @intent 일정 아이템 추가 (활성 여행 및 trips 배열 동시 동기화)
+     * @intent 일정 아이템 추가 (활성 여행 및 trips 배열 동시 동기화, selectedDay가 'all'일 때 1일차 안전 배정)
      * @agent  Gemini/manager-develop
      * @branch feat/mytriplog-core
      * @author @developer_name
@@ -685,7 +690,7 @@
         newItem.id = 'item-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
       }
       if (!newItem.day) {
-        newItem.day = this.state.selectedDay || 1;
+        newItem.day = (this.state.selectedDay === 'all' || this.state.selectedDay === 'ALL' ? 1 : this.state.selectedDay) || 1;
       }
       this.state.trip.items.push(newItem);
       const idx = this.state.trips.findIndex((t) => t.metadata && t.metadata.id === this.state.currentTripId);

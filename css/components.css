@@ -3109,3 +3109,79 @@
   line-height: 1.2;
 }
 
+/* ==========================================================================
+   전체 일차(All Days) 개요 및 날짜별 구분선 / 배지 스타일
+   ========================================================================== */
+
+.day-chip.chip-all {
+  font-weight: 700;
+  border-color: rgba(99, 102, 241, 0.4);
+  background: var(--bg-surface, #ffffff);
+}
+
+.day-chip.chip-all:hover {
+  border-color: #6366f1;
+  color: #4f46e5;
+}
+
+.day-chip.chip-all.active {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+  transform: translateY(-1px);
+}
+
+.day-chip.chip-all.active:hover {
+  filter: brightness(1.06);
+}
+
+/* 타임라인 날짜 구분 헤더 */
+.timeline-day-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 20px 0 12px 0;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--gray-300, #cbd5e1);
+}
+
+.day-divider-pill {
+  padding: 2px 8px;
+  border-radius: 12px;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.day-divider-date {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted, #64748b);
+}
+
+.day-divider-count {
+  font-size: 0.75rem;
+  color: var(--gray-500, #94a3b8);
+  margin-left: auto;
+}
+
+/* 지도 팝업 및 타임라인 카드 내 Day 배지 */
+.popup-day-pill {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+.category-tag.day-pill-tag {
+  border: none;
+  font-size: 0.72rem;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm, 6px);
+}
+
+
