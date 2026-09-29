@@ -405,20 +405,28 @@
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   }
 
-  /* 사이드바가 모바일에서는 하단 네비 위의 출몰형 바텀시트로 변환 */
+  /**
+   * @intent 모바일 바텀시트 프리미엄 디자인 및 순수 transform 기반 고속 GPU 모션 최적화
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   */
   .side-panel {
     position: fixed !important;
-    bottom: 56px !important; /* 모바일 하단 네비게이션 바 높이 위 */
+    bottom: 62px !important; /* 모바일 하단 네비게이션 바 높이와 1px 오차 없이 일체화 */
     left: 0 !important;
     right: 0 !important;
     width: 100% !important;
     max-width: 100vw !important;
     background-color: var(--bg-surface);
-    border-radius: 20px 20px 0 0;
-    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.2) !important;
+    border-radius: 24px 24px 0 0;
+    box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.12), 0 -2px 8px rgba(0, 0, 0, 0.04) !important;
     z-index: var(--z-bottomsheet) !important;
-    transition: transform 0.36s cubic-bezier(0.22, 1, 0.36, 1), height 0.36s cubic-bezier(0.22, 1, 0.36, 1);
-    will-change: transform, height;
+    height: calc(100vh - 84px) !important;
+    height: calc(100dvh - 84px) !important;
+    transition: transform 0.38s cubic-bezier(0.2, 0.9, 0.3, 1) !important;
+    will-change: transform;
     overflow: hidden;
   }
 
@@ -427,42 +435,37 @@
     transition: none !important;
   }
 
-  /* 4단계 바텀시트 상태 (hidden / peek / half / full) */
-  .side-panel.sheet-hidden {
-    transform: translateY(calc(100% + 70px)) !important;
-    pointer-events: none;
-  }
-
-  .side-panel.sheet-peek {
-    height: 60px !important;
+  /* 4단계 바텀시트 상태 (hidden / peek / half / full) - 오직 transform으로만 제어하여 덜컹거림 원천 차단 */
+  .side-panel.sheet-full {
     transform: translateY(0) !important;
   }
 
   .side-panel.sheet-half {
-    height: 48vh !important;
-    height: 48dvh !important;
-    transform: translateY(0) !important;
+    transform: translateY(52%) !important;
   }
 
-  .side-panel.sheet-full {
-    height: calc(100vh - 110px) !important;
-    height: calc(100dvh - 110px) !important;
-    transform: translateY(0) !important;
+  .side-panel.sheet-peek {
+    transform: translateY(calc(100% - 68px)) !important;
   }
 
-  /* 모바일 바텀시트 상단 핸들 컨테이너 */
+  .side-panel.sheet-hidden {
+    transform: translateY(calc(100% + 80px)) !important;
+    pointer-events: none;
+  }
+
+  /* 모바일 바텀시트 상단 핸들 컨테이너 (border-bottom 구분선 제거로 본문과 자연스러운 원피스 연결) */
   .bottom-sheet-handle-container {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 8px 16px 6px;
-    height: 36px;
+    padding: 10px 0 4px;
+    height: 24px;
     width: 100%;
     touch-action: none;
     -webkit-user-select: none;
     user-select: none;
     cursor: grab;
-    border-bottom: 1px solid var(--border-subtle);
+    border-bottom: none;
   }
 
   .bottom-sheet-handle-container:active {
@@ -475,7 +478,7 @@
     justify-content: center;
     align-items: center;
     cursor: grab;
-    padding: 4px 0;
+    padding: 2px 0;
   }
 
   .bottom-sheet-handle:active {
@@ -483,8 +486,8 @@
   }
 
   .bottom-sheet-handle-bar {
-    width: 48px;
-    height: 5px;
+    width: 40px;
+    height: 4.5px;
     background-color: var(--gray-300);
     border-radius: 9999px;
     transition: background-color 0.2s, transform 0.2s;
@@ -493,9 +496,10 @@
   .bottom-sheet-handle:hover .bottom-sheet-handle-bar,
   .bottom-sheet-handle:active .bottom-sheet-handle-bar,
   .bottom-sheet-handle-container:hover .bottom-sheet-handle-bar,
-  .bottom-sheet-handle-container:active .bottom-sheet-handle-bar {
+  .bottom-sheet-handle-container:active .bottom-sheet-handle-bar,
+  .side-panel.is-dragging .bottom-sheet-handle-bar {
     background-color: var(--gray-500);
-    transform: scaleX(1.08);
+    transform: scaleX(1.1);
   }
 
   /**
@@ -575,14 +579,14 @@
 
 
   /**
-   * @intent 모바일 바텀시트 내부 패딩 및 스크롤 영역 최적화 (손잡이 아래 자연스러운 여백 연결)
+   * @intent 모바일 바텀시트 내부 패딩 및 스크롤 영역 최적화 (손잡이 아래 자연스러운 여백 연결 및 하단 스크롤 숨통 여백)
    * @agent  Gemini/manager-develop
    * @branch feat/mytriplog-core
    * @author @developer_name
    * @date   2026-09-29
    */
   .panel-content-area {
-    padding: 16px 14px 28px;
+    padding: 12px 14px 48px;
     -webkit-overflow-scrolling: touch;
   }
 

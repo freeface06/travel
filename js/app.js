@@ -100,7 +100,7 @@
   }
 
   /**
-   * @intent 모바일 바텀시트 상태 설정 및 인라인 트랜스폼 리셋
+   * @intent 모바일 바텀시트 상태 설정 및 인라인 트랜스폼 리셋 (CSS 클래스 기반 순수 transform 제어)
    * @agent  Gemini/manager-develop
    * @branch feat/mytriplog-core
    * @author @developer_name
@@ -111,7 +111,7 @@
     currentSheetState = state;
     if (dom.sidePanel) {
       dom.sidePanel.style.transform = '';
-      dom.sidePanel.style.height = '';
+      dom.sidePanel.style.transition = '';
       dom.sidePanel.classList.remove('sheet-hidden', 'sheet-peek', 'sheet-half', 'sheet-full');
       dom.sidePanel.classList.add(`sheet-${state}`);
     }
@@ -145,7 +145,7 @@
   }
 
   /**
-   * @intent 모바일 바텀시트 제스처 엔진 (Pointer/Touch 기반 실시간 GPU transform 및 부드러운 스냅)
+   * @intent 모바일 바텀시트 고속 제스처 엔진 (단일 고정 높이 + 순수 GPU transform 기반 스무스 스냅)
    * @agent  Gemini/manager-develop
    * @branch feat/mytriplog-core
    * @author @developer_name
@@ -164,9 +164,25 @@
     let lastY = 0;
     let lastTime = 0;
     let velocity = 0; // px / ms (아래로: 양수, 위로: 음수)
-    let currentDeltaY = 0;
-    let initialPanelHeight = 0;
+    let baseY = 0;
+    let panelHeight = 0;
     let activePointerId = null;
+
+    // 상태별 기준 Y 오프셋(픽셀) 계산
+    function getBaseYForState(state, height) {
+      switch (state) {
+        case 'full':
+          return 0;
+        case 'half':
+          return height * 0.52;
+        case 'peek':
+          return Math.max(0, height - 68);
+        case 'hidden':
+          return height + 80;
+        default:
+          return height * 0.52;
+      }
+    }
 
     function onPointerDown(e) {
       if (window.innerWidth > 900) return;
@@ -177,10 +193,12 @@
       startY = e.clientY;
       lastY = e.clientY;
       lastTime = performance.now();
-      currentDeltaY = 0;
       velocity = 0;
-      initialPanelHeight = panel.getBoundingClientRect().height;
 
+      panelHeight = panel.getBoundingClientRect().height || (window.innerHeight - 84);
+      baseY = getBaseYForState(currentSheetState, panelHeight);
+
+      panel.style.transition = 'none';
       panel.classList.add('is-dragging');
 
       if (e.target && e.target.setPointerCapture && activePointerId !== null) {
@@ -194,41 +212,33 @@
       if (!isDragging || window.innerWidth > 900) return;
       if (activePointerId !== null && e.pointerId !== undefined && e.pointerId !== activePointerId) return;
 
-      const currentY = e.clientY;
+      const currentPointerY = e.clientY;
       const now = performance.now();
       const dt = now - lastTime;
 
       if (dt > 8) {
-        const instantVelocity = (currentY - lastY) / dt;
+        const instantVelocity = (currentPointerY - lastY) / dt;
         velocity = velocity * 0.4 + instantVelocity * 0.6;
-        lastY = currentY;
+        lastY = currentPointerY;
         lastTime = now;
       }
 
-      currentDeltaY = currentY - startY; // 아래로 드래그: 양수, 위로 드래그: 음수
+      const deltaY = currentPointerY - startY;
+      let currentY = baseY + deltaY;
 
-      let offsetY = currentDeltaY;
-
-      // 위로 드래그 시 (offsetY < 0): 최대 높이 초과 시 부드러운 저항감 적용
-      if (offsetY < 0) {
-        const windowH = window.innerHeight;
-        const maxSheetHeight = windowH - 110;
-        const upwardAllowance = Math.max(0, maxSheetHeight - initialPanelHeight);
-
-        if (-offsetY > upwardAllowance) {
-          const overDistance = -offsetY - upwardAllowance;
-          offsetY = -(upwardAllowance + overDistance * 0.22);
-        }
+      // 위로 끌어올릴 때(currentY < 0): 부드러운 고무줄 저항감
+      if (currentY < 0) {
+        currentY = currentY * 0.2;
       }
 
-      // 아래로 과도하게 드래그 시 저항감 적용
-      if (offsetY > initialPanelHeight) {
-        const overDistance = offsetY - initialPanelHeight;
-        offsetY = initialPanelHeight + overDistance * 0.25;
+      // 아래로 과도하게 내릴 때(currentY > maxOffset): 고무줄 저항감
+      const maxOffset = panelHeight + 80;
+      if (currentY > maxOffset) {
+        const overDistance = currentY - maxOffset;
+        currentY = maxOffset + overDistance * 0.2;
       }
 
-      // 실시간 GPU 컴포지팅 가속
-      panel.style.transform = `translate3d(0, ${offsetY}px, 0)`;
+      panel.style.transform = `translate3d(0, ${currentY}px, 0)`;
     }
 
     function onPointerUp(e) {
@@ -245,28 +255,37 @@
       }
       activePointerId = null;
 
-      // 1. 단순 탭(클릭) 인터랙션: 드래그 변위가 6px 미만인 경우
-      if (Math.abs(currentDeltaY) < 6) {
+      const endY = (e.clientY !== undefined) ? e.clientY : lastY;
+      const deltaY = endY - startY;
+
+      // 1. 단순 탭(클릭) 인터랙션: 이동 거리 < 8px
+      if (Math.abs(deltaY) < 8) {
         panel.style.transform = '';
+        panel.style.transition = '';
         cycleBottomSheetState();
         return;
       }
 
-      // 2. 드래그 완료 후 스냅 목표 상태 결정
-      const windowH = window.innerHeight;
-      const fullHeight = windowH - 110;
-      const halfHeight = windowH * 0.48;
+      // 2. 현재 Y 좌표 계산 (저항감 포함)
+      let currentY = baseY + deltaY;
+      if (currentY < 0) {
+        currentY = currentY * 0.2;
+      }
+      const maxOffset = panelHeight + 80;
+      if (currentY > maxOffset) {
+        currentY = maxOffset + (currentY - maxOffset) * 0.2;
+      }
 
       let targetState = currentSheetState;
 
-      // 플릭/스와이프 속도 및 이동 거리 판정
-      const isFlickDown = velocity > 0.45 || currentDeltaY > 80;
-      const isFlickUp = velocity < -0.45 || currentDeltaY < -80;
+      // 플릭(속도 velocity) 및 놓은 위치에 따라 가장 자연스러운 목표 상태(hidden, half, full) 결정
+      const isFlickDown = velocity > 0.45 || deltaY > 100;
+      const isFlickUp = velocity < -0.45 || deltaY < -100;
 
       if (isFlickDown) {
-        // 아래로 휙 내렸거나 일정 이상 내렸을 때
+        // 아래로 휙 스와이프: full이면 half 또는 hidden, half이면 hidden
         if (currentSheetState === 'full') {
-          if (currentDeltaY > 200 || velocity > 0.85) {
+          if (velocity > 0.85 || deltaY > 240) {
             targetState = 'hidden';
           } else {
             targetState = 'half';
@@ -276,33 +295,50 @@
           targetState = 'hidden';
         }
       } else if (isFlickUp) {
-        // 위로 휙 올렸거나 일정 이상 올렸을 때
-        if (currentSheetState === 'hidden' || currentSheetState === 'peek') {
-          targetState = 'half';
-        } else {
-          // half였으면 full로 쑥 올라옴
-          targetState = 'full';
-        }
+        // 위로 휙 스와이프: hidden/half이면 full
+        targetState = 'full';
       } else {
-        // 천천히 놓았을 때는 놓은 위치에서 가장 가까운 상태(hidden / half / full)로 스냅
-        const effectiveHeight = initialPanelHeight - currentDeltaY;
-        const distToFull = Math.abs(effectiveHeight - fullHeight);
-        const distToHalf = Math.abs(effectiveHeight - halfHeight);
-        const distToHidden = Math.abs(effectiveHeight - 0);
+        // 천천히 놓았을 때: 가장 가까운 스냅 지점으로 결정
+        const fullY = 0;
+        const halfY = panelHeight * 0.52;
+        const hiddenY = panelHeight + 80;
 
-        if (effectiveHeight < halfHeight * 0.4) {
-          targetState = 'hidden';
-        } else if (distToFull < distToHalf && distToFull < distToHidden) {
+        const distToFull = Math.abs(currentY - fullY);
+        const distToHalf = Math.abs(currentY - halfY);
+        const distToHidden = Math.abs(currentY - hiddenY);
+
+        if (distToFull <= distToHalf && distToFull <= distToHidden) {
           targetState = 'full';
-        } else if (distToHidden < distToHalf && distToHidden < distToFull) {
-          targetState = 'hidden';
-        } else {
+        } else if (distToHalf <= distToFull && distToHalf <= distToHidden) {
           targetState = 'half';
+        } else {
+          targetState = 'hidden';
         }
       }
 
-      panel.style.transform = '';
-      setBottomSheetState(targetState);
+      // 3. 스냅 시: 목표 상태의 기준 픽셀 Y로 transition 애니메이션을 주어 스르륵 안착시킨 뒤
+      //    완료 시 인라인 transform 리셋 및 setBottomSheetState(targetState) 호출!
+      const targetY = getBaseYForState(targetState, panelHeight);
+      panel.style.transition = 'transform 0.34s cubic-bezier(0.2, 0.9, 0.3, 1)';
+      panel.style.transform = `translate3d(0, ${targetY}px, 0)`;
+
+      let snapFinished = false;
+      const finalizeSnap = () => {
+        if (snapFinished) return;
+        snapFinished = true;
+        panel.removeEventListener('transitionend', onTransitionEnd);
+        panel.style.transition = '';
+        setBottomSheetState(targetState);
+      };
+
+      const onTransitionEnd = (evt) => {
+        if (evt && evt.propertyName !== 'transform') return;
+        finalizeSnap();
+      };
+
+      panel.addEventListener('transitionend', onTransitionEnd);
+      // 안전 타이머: 애니메이션 타임아웃(360ms)으로 이벤트 유실 완벽 방어
+      setTimeout(finalizeSnap, 360);
     }
 
     if (window.PointerEvent) {
@@ -331,11 +367,21 @@
         });
       }, { passive: true });
 
-      window.addEventListener('touchend', () => {
-        onPointerUp({ pointerId: 1, target: handleTarget });
+      window.addEventListener('touchend', (e) => {
+        const touch = e.changedTouches ? e.changedTouches[0] : null;
+        onPointerUp({
+          pointerId: 1,
+          target: handleTarget,
+          clientY: touch ? touch.clientY : undefined
+        });
       });
-      window.addEventListener('touchcancel', () => {
-        onPointerUp({ pointerId: 1, target: handleTarget });
+      window.addEventListener('touchcancel', (e) => {
+        const touch = e.changedTouches ? e.changedTouches[0] : null;
+        onPointerUp({
+          pointerId: 1,
+          target: handleTarget,
+          clientY: touch ? touch.clientY : undefined
+        });
       });
     }
   }
