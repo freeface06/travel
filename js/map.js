@@ -91,6 +91,48 @@
     else localStorage.removeItem('mytriplog_gmaps_api_key');
   }
 
+  /**
+   * @intent 마커 클릭 시 InfoWindow 및 팝업용 미니 일정 카드 템플릿 생성
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   */
+  function createMarkerPopupHtml(item, order, themeColor) {
+    const catMeta = {
+      FLIGHT: '비행기',
+      AIRPORT: '공항',
+      HOTEL: '숙소',
+      ATTRACTION: '명소',
+      DINING: '식당',
+      TRANSIT: '교통'
+    };
+    const catLabel = catMeta[item.category] || '일정';
+    const timeText = item.time || item.checkInTime || item.departureTime || '';
+    const subInfo = item.flightNo || item.transitMode || item.menuRecommendation || item.address || '';
+    const costText = Number(item.cost) > 0 ? `${Number(item.cost).toLocaleString()}원` : '';
+
+    return `
+      <div class="map-item-popup">
+        <div class="popup-header">
+          <span class="popup-order-badge" style="background-color:${themeColor || '#2563eb'};">${order}</span>
+          <span class="popup-cat-badge">${escapeHtml(catLabel)}</span>
+          <strong class="popup-title">${escapeHtml(item.title || '일정')}</strong>
+        </div>
+        ${timeText || subInfo ? `
+          <div class="popup-details">
+            ${timeText ? `<span class="popup-detail-time">${escapeHtml(timeText)}</span>` : ''}
+            ${subInfo ? `<span class="popup-detail-sub">${escapeHtml(subInfo)}</span>` : ''}
+          </div>
+        ` : ''}
+        ${costText ? `<div class="popup-cost">${costText}</div>` : ''}
+        <button type="button" class="btn-popup-view" data-item-id="${escapeHtml(item.id)}">
+          상세보기 / 수정
+        </button>
+      </div>
+    `.trim();
+  }
+
   class TripMapManager {
     constructor() {
       this.engine = 'none'; // 'google' | 'leaflet' | 'none'
@@ -106,6 +148,7 @@
       this.isPinDropActive = false;
       this.currentCenter = [35.6895, 139.6917];
       this.currentZoom = 12;
+      this.currentRenderedDay = null;
     }
 
     setApiKeyBannerVisible(visible) {
@@ -442,16 +485,21 @@
             zIndex: isSelected ? 900 : 100 + order
           });
 
+          const popupHtml = createMarkerPopupHtml(item, order, themeColor);
+          marker.popupHtml = popupHtml;
+
           marker.addListener('click', () => {
             if (this.infoWindow) {
-              const div = document.createElement('div');
-              div.style.padding = '4px 6px';
-              div.innerHTML = `<strong>[${escapeHtml(order)}] ${escapeHtml(item.title || '일정')}</strong><div style="font-size:12px;color:#666;">${escapeHtml(item.time || '')}</div>`;
-              this.infoWindow.setContent(div);
+              this.infoWindow.setContent(createMarkerPopupHtml(item, order, themeColor));
               this.infoWindow.open(this.map, marker);
             }
             if (this.onMarkerClickListener) this.onMarkerClickListener(item.id);
           });
+
+          if (isSelected && this.infoWindow) {
+            this.infoWindow.setContent(popupHtml);
+            this.infoWindow.open(this.map, marker);
+          }
 
           this.markers.push(marker);
           this.markerMap.set(item.id, marker);
@@ -466,10 +514,18 @@
           });
 
           const marker = L.marker([lat, lng], { icon, zIndexOffset: isSelected ? 1000 : order * 10 }).addTo(this.map);
-          marker.bindPopup(`<strong>[${escapeHtml(order)}] ${escapeHtml(item.title || '일정')}</strong><div>${escapeHtml(item.time || '')}</div>`);
+          const popupHtml = createMarkerPopupHtml(item, order, themeColor);
+          marker.popupHtml = popupHtml;
+          marker.bindPopup(popupHtml, { minWidth: 200, className: 'leaflet-custom-popup' });
+
           marker.on('click', () => {
+            marker.openPopup();
             if (this.onMarkerClickListener) this.onMarkerClickListener(item.id);
           });
+
+          if (isSelected) {
+            marker.openPopup();
+          }
 
           this.markers.push(marker);
           this.markerMap.set(item.id, marker);
@@ -532,8 +588,10 @@
         }
       });
 
-      // 지도 범위 자동 조정
-      if (points.length > 0) {
+      // 지도 범위 자동 조정 (일차가 변경되었거나 첫 렌더링 시에만 실행하여 사용자 줌/선택 상태 유지)
+      const dayChanged = this.currentRenderedDay !== dayNumber;
+      this.currentRenderedDay = dayNumber;
+      if (points.length > 0 && dayChanged) {
         if (this.engine === 'google') {
           const bounds = new google.maps.LatLngBounds();
           points.forEach((p) => bounds.extend({ lat: p[0], lng: p[1] }));
@@ -544,14 +602,26 @@
       }
     }
 
-    flyToItem(itemId) {
-      const marker = this.markerMap.get(itemId);
+    /**
+     * @intent 특정 마커 위치로 카메라 부드러운 이동 및 팝업/InfoWindow 활성화
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     */
+    flyToItem(itemOrId) {
+      const targetId = typeof itemOrId === 'object' && itemOrId !== null ? itemOrId.id : itemOrId;
+      const marker = this.markerMap.get(targetId);
       if (!marker || !this.map) return;
 
       if (this.engine === 'google') {
         const pos = marker.getPosition();
         this.map.panTo(pos);
         this.map.setZoom(15);
+        if (this.infoWindow && marker.popupHtml) {
+          this.infoWindow.setContent(marker.popupHtml);
+          this.infoWindow.open(this.map, marker);
+        }
       } else if (this.engine === 'leaflet') {
         const latlng = marker.getLatLng();
         this.map.flyTo(latlng, 15, { duration: 0.8 });
@@ -585,6 +655,7 @@
     mapManager,
     DAY_COLORS,
     getDayColor,
+    createMarkerPopupHtml,
     getSavedGoogleApiKey,
     saveGoogleApiKey
   };

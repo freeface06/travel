@@ -978,6 +978,17 @@
   }
 
   /**
+   * @intent 일정 등록/수정 모달 호출 별칭 함수 (openItemModal 위임)
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   */
+  function openItemEditModal(item) {
+    openItemModal(item);
+  }
+
+  /**
    * 여행 메타데이터 편집 모달 열기
    */
   function openTripMetaModal() {
@@ -1462,13 +1473,39 @@
       setBottomSheetState('half');
     }
 
-    // 3. 지도 마커 클릭 시 타임라인 카드 포커스
+    // 3. 지도 마커 클릭 시 타임라인 카드 포커스 및 바텀시트 연동
+    /**
+     * @intent 지도 마커 클릭 시 해당 일정 일차/탭/바텀시트 동기화 및 하이라이트 애니메이션
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     */
     mapManager.setMarkerClickListener((itemId) => {
-      store.setSelectedItemId(itemId);
-      const card = dom.panelContentArea.querySelector(`[data-id="${itemId}"]`);
-      if (card) {
-        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const trip = store.getCurrentTrip();
+      const item = (trip.items || []).find((it) => it.id === itemId);
+      if (!item) return;
+
+      if (Number(item.day) !== Number(store.getState().selectedDay)) {
+        store.setSelectedDay(Number(item.day));
       }
+      if (store.getState().activeTab !== 'timeline') {
+        store.setActiveTab('timeline');
+      }
+      if (window.innerWidth <= 900) {
+        if (currentSheetState === 'hidden' || currentSheetState === 'peek') {
+          setBottomSheetState('half');
+        }
+      }
+      store.setSelectedItemId(itemId);
+      setTimeout(() => {
+        const card = dom.panelContentArea.querySelector(`[data-id="${itemId}"]`);
+        if (card) {
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          card.classList.add('card-highlight-pulse');
+          setTimeout(() => card.classList.remove('card-highlight-pulse'), 1600);
+        }
+      }, 60);
     });
 
     // 4. 지도 핀 드롭 리스너 연동
@@ -1837,6 +1874,23 @@
 
     // 첫 알림 발송으로 화면 렌더링 개시
     store.notify();
+
+    // 15. 지도 팝업 내 [상세보기 / 수정] 버튼 클릭 글로벌 이벤트 위임
+    /**
+     * @intent 지도 팝업 내 상세보기/수정 버튼 클릭 시 해당 일정 편집 모달 오픈
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     */
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('.btn-popup-view');
+      if (!btn) return;
+      const itemId = btn.dataset.itemId;
+      const trip = store.getCurrentTrip();
+      const item = (trip.items || []).find((it) => it.id === itemId);
+      if (item) openItemEditModal(item);
+    });
   }
 
   // DOM 로드 완료 시 구동
