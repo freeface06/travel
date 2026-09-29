@@ -65,9 +65,18 @@
       this.uploadedPhotoId = data.photoId || null;
       this.uploadedPhotoDataUrl = data.photoDataUrl || null;
 
-      const payerOptions = participants.map((p) => {
-        const selected = (data.payer || '') === p ? ' selected' : '';
-        return `<option value="${escapeHtml(p)}"${selected}>${escapeHtml(p)}</option>`;
+      // 신혼여행 특화 기본 결제자 목록 (공동 지출, 신랑, 신부)
+      const baseMembers = (participants && participants.length > 0)
+        ? participants.filter((p) => p !== '공통' && p !== '공동')
+        : ['신랑', '신부'];
+      
+      const allPayers = ['공통', ...baseMembers];
+      const currentPayer = data.payer || '공통';
+
+      const payerOptions = allPayers.map((p) => {
+        const label = p === '공통' ? '공동 지출' : p;
+        const selected = (currentPayer === p) ? ' selected' : '';
+        return `<option value="${escapeHtml(p)}"${selected}>${escapeHtml(label)}</option>`;
       }).join('');
 
       return `
@@ -161,7 +170,6 @@
               <label class="form-label" for="item-payer">결제자</label>
               <select id="item-payer" name="payer" class="form-control">
                 ${payerOptions}
-                <option value="공통"${(data.payer || '') === '공통' ? ' selected' : ''}>공통 회비</option>
               </select>
             </div>
           </div>

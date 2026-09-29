@@ -17,14 +17,14 @@
 
   const STORAGE_KEY = 'mytriplog_trip_data_v1';
 
-  // 6대 카테고리가 모두 포함된 도쿄 3박 4일 초기 기본 샘플 일정
+  // 6대 카테고리가 모두 포함된 신혼여행(Honeymoon) 초기 기본 샘플 일정
   const DEFAULT_TRIP = {
     metadata: {
-      id: 'trip-tokyo-2026',
-      title: '도쿄 3박 4일 감성 힐링 여행',
+      id: 'trip-honeymoon-2026',
+      title: '우리의 로맨틱 신혼여행',
       startDate: '2026-10-15',
-      endDate: '2026-10-18',
-      participants: ['민우', '지훈', '서연'],
+      endDate: '2026-10-20',
+      participants: ['신랑', '신부'],
       baseCurrency: 'KRW',
       customRates: {
         KRW: 1.0,
@@ -47,16 +47,16 @@
         departureTime: '08:40',
         arrivalTime: '11:15',
         terminalGate: 'T1 게이트 32',
-        seat: '14A, 14B, 14C',
+        seat: '14A, 14B (신혼 커플석)',
         bookingRef: 'RS-998241',
         cost: 650000,
         currency: 'KRW',
-        payer: '민우',
+        payer: '신랑',
         lat: 37.4602,
         lng: 126.4407,
         destLat: 35.7720,
         destLng: 140.3929,
-        memo: '기내 반입 액체류 100ml 규정 준수'
+        memo: '기내 반입 액체류 100ml 규정 준수 및 면세점 커플 링 수령'
       },
       {
         id: 'item-002',
@@ -69,7 +69,7 @@
         pickupInfo: '지하 1층 게이세이 티켓 창구 앞 (12:10 탑승)',
         cost: 0,
         currency: 'JPY',
-        payer: '지훈',
+        payer: '신부',
         lat: 35.7720,
         lng: 140.3929,
         memo: '스이카(Suica) 교통카드 모바일 충전 확인'
@@ -84,10 +84,10 @@
         destination: '닛포리역',
         time: '12:20',
         duration: '36분',
-        platformMemo: '1번 승강장 4호차',
-        cost: 7500,
+        platformMemo: '1번 승강장 4호차 커플석',
+        cost: 5000,
         currency: 'JPY',
-        payer: '서연',
+        payer: '공통',
         lat: 35.7278,
         lng: 139.7710,
         memo: '지정석 티켓 사전 교환 완료'
@@ -96,7 +96,7 @@
         id: 'item-004',
         day: 1,
         category: 'HOTEL',
-        title: '호텔 그레이서리 신주쿠',
+        title: '호텔 그레이서리 신주쿠 (허니문 룸)',
         checkInTime: '15:00',
         checkOutTime: '11:00',
         address: '도쿄도 신주쿠구 카부키초 1-19-1 (호텔 그레이서리 신주쿠)',
@@ -105,10 +105,10 @@
         luggageStorage: '체크인 전 무료 짐 보관 가능',
         cost: 420000,
         currency: 'KRW',
-        payer: '지훈',
+        payer: '공통',
         lat: 35.6953,
         lng: 139.7020,
-        memo: '8층 테라스에 거대 고질라 헤드 포토존 위치'
+        memo: '허니문 웰컴 과일 및 고층 시티뷰 배정 확인'
       },
       {
         id: 'item-005',
@@ -118,13 +118,13 @@
         mealType: '석식',
         reservedFor: '현장 키오스크 발권',
         menuRecommendation: '천연 돈코츠 라멘 + 반숙란 + 차슈 추가',
-        cost: 4800,
+        cost: 3200,
         currency: 'JPY',
-        payer: '민우',
+        payer: '신랑',
         paymentMethod: '카드',
         lat: 35.6917,
         lng: 139.7032,
-        memo: '비법 소스 3단계 추천, 개인 독서실형 칸막이 좌석'
+        memo: '신혼여행 첫날 저녁 식사, 둘이 함께 든든하게 즐기기'
       },
 
       // Day 2: 관광명소, 식당, 카페
@@ -132,18 +132,18 @@
         id: 'item-006',
         day: 2,
         category: 'ATTRACTION',
-        title: '메이지 신궁 & 요요기 공원',
+        title: '메이지 신궁 & 요요기 공원 산책',
         time: '09:30',
         openingHours: '06:00 - 16:30',
         bookingStatus: '자유 관람 (입장료 무료)',
         ticketCostPerPerson: 0,
-        tips: '아침 일찍 방문 시 울창한 삼나무 숲 피톤치드 산책 최고',
+        tips: '아침 일찍 방문 시 울창한 삼나무 숲 피톤치드 둘만의 산책로 최고',
         cost: 0,
         currency: 'JPY',
-        payer: '민우',
+        payer: '공통',
         lat: 35.6764,
         lng: 139.6993,
-        memo: '본전 내부 사진 촬영 제한 구역 주의'
+        memo: '신혼부부 소원 부적(에마) 구매 및 기념 촬영'
       },
       {
         id: 'item-007',
@@ -151,15 +151,15 @@
         category: 'DINING',
         title: '오모테산도 우카이테이 (철판요리)',
         mealType: '중식',
-        reservedFor: '지훈 (12:30 예약)',
-        menuRecommendation: '와규 안심 런치 코스',
-        cost: 36000,
+        reservedFor: '허니문 런치 (12:30 예약)',
+        menuRecommendation: '와규 안심 스페셜 런치 코스',
+        cost: 28000,
         currency: 'JPY',
-        payer: '서연',
+        payer: '신부',
         paymentMethod: '카드',
         lat: 35.6669,
         lng: 139.7065,
-        memo: '스마트 캐주얼 드레스코드 적용'
+        memo: '창가 예약석, 허니문 디저트 플레이팅 요청 완료'
       },
       {
         id: 'item-008',
@@ -171,12 +171,12 @@
         bookingStatus: '일몰 타임 사전 예약 완료',
         ticketCostPerPerson: 2200,
         tips: '스카이 엣지 코너 포토 스팟은 대기열이 있으니 일몰 30분 전 도착 요망',
-        cost: 6600,
+        cost: 4400,
         currency: 'JPY',
-        payer: '지훈',
+        payer: '공통',
         lat: 35.6591,
         lng: 139.7027,
-        memo: '삼각대 및 백팩 루프탑 반입 불가(코인로커 보관 필수)'
+        memo: '도쿄 야경을 배경으로 로맨틱 커플 사진 촬영'
       }
     ]
   };
@@ -210,6 +210,11 @@
         if (raw) {
           const parsed = JSON.parse(raw);
           if (parsed && parsed.metadata && Array.isArray(parsed.items)) {
+            // 과거 민우, 지훈, 서연 더미 데이터가 남아있는 경우 신혼여행 기본값으로 자동 교체/마이그레이션
+            if (parsed.metadata.title === '도쿄 3박 4일 감성 힐링 여행' || 
+                (Array.isArray(parsed.metadata.participants) && parsed.metadata.participants.includes('민우'))) {
+              return clone(DEFAULT_TRIP);
+            }
             return parsed;
           }
         }

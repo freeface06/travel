@@ -464,34 +464,115 @@
 
     const { settlements, summary, balances } = calculateSettlements(participants, trip.items, baseCurr, rates);
 
-    const perPerson = participants.length > 0 ? Math.round(summary.totalInBase / participants.length) : 0;
+    const perPerson = Math.round(summary.totalInBase / 2);
+
+    // 카테고리별 한국어 명칭 및 아이콘 매핑
+    const catMeta = {
+      FLIGHT: { label: '항공권', icon: 'FLIGHT' },
+      HOTEL: { label: '숙소/호텔', icon: 'HOTEL' },
+      DINING: { label: '식비/맛집', icon: 'DINING' },
+      ATTRACTION: { label: '관광/투어', icon: 'ATTRACTION' },
+      TRANSIT: { label: '교통/이동', icon: 'TRANSIT' },
+      AIRPORT: { label: '공항/기타', icon: 'AIRPORT' }
+    };
+
+    // 카테고리별 지출액 내림차순 정렬
+    const catEntries = Object.entries(summary.byCategory || {})
+      .filter(([_, amt]) => amt > 0)
+      .sort((a, b) => b[1] - a[1]);
 
     let html = `
       <div class="expense-dashboard">
         <!-- 상단 요약 통계 -->
         <div class="summary-stat-grid">
           <div class="stat-card">
-            <span class="stat-label">총 여행 경비 (${baseCurr})</span>
+            <span class="stat-label">총 신혼여행 경비 (${baseCurr})</span>
             <span class="stat-value">${formatAmount(summary.totalInBase, baseCurr)}</span>
           </div>
           <div class="stat-card">
-            <span class="stat-label">1인당 분담금 (${participants.length}명)</span>
+            <span class="stat-label">1인당 평균 경비 (2인 기준)</span>
             <span class="stat-value" style="color:var(--primary-600);">${formatAmount(perPerson, baseCurr)}</span>
           </div>
         </div>
 
-        <!-- 최소 송금 그리디 정산 결과 -->
+        <!-- 신혼여행 항목별 지출 분석 -->
+        <div class="expense-category-card">
+          <div style="font-size:0.9rem; font-weight:700; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+            ${getIcon('CALCULATOR', { size: 18, color: 'var(--primary-600)' })}
+            <span>항목별 지출 분석 (예산 배분)</span>
+          </div>
+    `;
+
+    if (catEntries.length === 0) {
+      html += `
+        <div style="font-size:0.85rem; color:var(--text-muted); padding:6px 0;">
+          등록된 지출 내역이 없습니다.
+        </div>
+      `;
+    } else {
+      catEntries.forEach(([catKey, catAmt]) => {
+        const cInfo = catMeta[catKey] || { label: catKey, icon: 'INFO' };
+        const percent = summary.totalInBase > 0 ? Math.round((catAmt / summary.totalInBase) * 100) : 0;
+        html += `
+          <div class="expense-cat-row">
+            <div class="expense-cat-header">
+              <span class="expense-cat-name">
+                ${getIcon(cInfo.icon, { size: 14, color: 'var(--gray-600)' })}
+                ${cInfo.label} <strong style="font-size:0.75rem; color:var(--primary-600);">(${percent}%)</strong>
+              </span>
+              <span class="expense-cat-amount">${formatAmount(catAmt, baseCurr)}</span>
+            </div>
+            <div class="expense-progress-bar">
+              <div class="expense-progress-fill" style="width: ${percent}%;"></div>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    html += `
+        </div>
+
+        <!-- 결제 주체별 지출 요약 -->
+        <div class="member-balance-list">
+          <div style="font-size:0.88rem; font-weight:700; color:var(--text-main); margin-bottom:4px;">
+            결제 주체별 지출 현황
+          </div>
+    `;
+
+    // 공동 지출, 신랑, 신부 순서로 렌더링
+    const allPayers = Array.from(new Set(['공통', '신랑', '신부', ...Object.keys(summary.paidByMember || {})]));
+    allPayers.forEach((p) => {
+      const paid = summary.paidByMember[p] || 0;
+      if (paid <= 0 && p !== '공통' && p !== '신랑' && p !== '신부') return;
+      const label = p === '공통' ? '부부 공동 지출' : p;
+      html += `
+        <div class="member-balance-row">
+          <div>
+            <strong>${escapeHtml(label)}</strong>
+          </div>
+          <div style="font-weight:700; color:var(--text-main); font-size:0.9rem;">
+            ${formatAmount(paid, baseCurr)}
+          </div>
+        </div>
+      `;
+    });
+
+    html += `
+        </div>
+
+        <!-- 상호 송금 정산 내역 (필요 시) -->
         <div class="settlement-route-box">
           <div class="settlement-route-title">
-            ${getIcon('CALCULATOR', { size: 18, color: 'var(--primary-600)' })}
-            <span>최소 횟수 1/N 송금 내역 (${settlements.length}건)</span>
+            ${getIcon('CHECK', { size: 16, color: 'var(--primary-600)' })}
+            <span>상호 정산 상태</span>
           </div>
     `;
 
     if (settlements.length === 0) {
       html += `
-        <div style="font-size:0.85rem; color:var(--text-muted); padding:10px 0;">
-          [V] 모든 참가자의 지출 정산이 완벽히 일치하거나 정산할 지출이 없습니다.
+        <div style="font-size:0.85rem; color:var(--text-muted); padding:6px 0;">
+          [V] 부부 공동 경비로 모든 정산이 완료되었습니다.
         </div>
       `;
     } else {
@@ -510,34 +591,6 @@
         `;
       });
     }
-
-    html += `
-        </div>
-
-        <!-- 참가자별 정산 내역표 -->
-        <div class="member-balance-list">
-          <div style="font-size:0.85rem; font-weight:700; color:var(--text-main); margin-bottom:6px;">
-            참가자별 결제 및 정산 상태
-          </div>
-    `;
-
-    balances.forEach((b) => {
-      const net = b.net;
-      const isPlus = net > 0;
-      const isZero = Math.abs(net) < 1;
-      const diffClass = isZero ? '' : (isPlus ? 'balance-diff-plus' : 'balance-diff-minus');
-      const diffText = isZero ? '정산 완료' : (isPlus ? `+${formatAmount(net, baseCurr)} 받기` : `${formatAmount(net, baseCurr)} 보내기`);
-
-      html += `
-        <div class="member-balance-row">
-          <div>
-            <strong>${escapeHtml(b.member)}</strong>
-            <span style="font-size:0.75rem; color:var(--text-muted); margin-left:6px;">(지출: ${formatAmount(b.paid, baseCurr)})</span>
-          </div>
-          <div class="${diffClass}">${diffText}</div>
-        </div>
-      `;
-    });
 
     html += `
         </div>
@@ -832,11 +885,6 @@
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label" for="meta-participants">참가자 (쉼표로 구분)</label>
-          <input type="text" id="meta-participants" name="participants" class="form-control" 
-                 placeholder="예: 민우, 지훈, 서연" value="${escapeHtml((meta.participants || []).join(', '))}" />
-        </div>
-        <div class="form-group">
           <label class="form-label" for="meta-base-currency">정산 기준 통화</label>
           <select id="meta-base-currency" name="baseCurrency" class="form-control">
             <option value="KRW"${(meta.baseCurrency || 'KRW') === 'KRW' ? ' selected' : ''}>KRW (대한민국 원)</option>
@@ -863,17 +911,13 @@
       const title = form.title.value.trim();
       const startDate = form.startDate.value;
       const endDate = form.endDate.value;
-      const participants = form.participants.value
-        .split(',')
-        .map((p) => p.trim())
-        .filter(Boolean);
       const baseCurrency = form.baseCurrency.value;
 
       store.updateMetadata({
         title,
         startDate,
         endDate,
-        participants: participants.length > 0 ? participants : ['나'],
+        participants: ['신랑', '신부'],
         baseCurrency
       });
 
