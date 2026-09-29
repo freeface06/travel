@@ -1,6 +1,7 @@
 /**
  * @intent Google Maps 메인 지도 엔진 및 Leaflet/OpenStreetMap 무오류 폴백 하이브리드 대화형 지도 렌더러
  *         - Google Maps JavaScript API 동적 주입 및 Places 라이브러리 연동
+ *         - loading=async 파라미터 제거 및 importLibrary/Map 클래스 가용성 비동기 폴링 대기 (최대 1500ms)
  *         - 번호 커스텀 SVG 마커 (1, 2, 3...)
  *         - 일차별 고유 테마 컬러 Polyline 및 항공편(FLIGHT) 전용 점선 항공로
  *         - InfoWindow/Popup 및 타임라인 카드-마커 양방향 연동
@@ -182,7 +183,7 @@
     }
 
     /**
-     * @intent Google Maps JavaScript API 비동기 스크립트 로드
+     * @intent Google Maps JavaScript API 스크립트 동적 로드 및 Map 클래스 준비 대기
      * @agent  Gemini/manager-develop
      * @branch feat/mytriplog-core
      * @author @developer_name
@@ -202,10 +203,27 @@
         }
 
         const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey.trim())}&libraries=places&language=ko&region=KR&loading=async`;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey.trim())}&libraries=places&language=ko&region=KR`;
         script.async = true;
         script.defer = true;
-        script.onload = () => resolve();
+        script.onload = async () => {
+          // 스크립트 로드 완료 후 Map 클래스 가용성 대기 (최대 1500ms)
+          let attempts = 0;
+          while (!this.isGoogleMapsReady() && attempts < 15) {
+            if (window.google?.maps?.importLibrary && !window.google.maps.Map) {
+              try {
+                const mapsLib = await window.google.maps.importLibrary('maps');
+                if (mapsLib && mapsLib.Map) {
+                  window.google.maps.Map = mapsLib.Map;
+                }
+              } catch (_) {}
+            }
+            if (this.isGoogleMapsReady()) break;
+            await new Promise((r) => setTimeout(r, 100));
+            attempts++;
+          }
+          resolve();
+        };
         script.onerror = (err) => reject(err);
         document.head.appendChild(script);
       });
@@ -235,10 +253,13 @@
           await this.loadGoogleScript(activeKey);
           if (this.isGoogleMapsReady()) {
             this.initGoogleMaps(container, initialCenter, initialZoom);
+            console.log('Google Maps initialized successfully.');
             return;
+          } else {
+            console.error('Google Maps script loaded, but google.maps.Map is not available. Falling back to Leaflet.');
           }
         } catch (err) {
-          console.warn('Google Maps load failed. Falling back to Leaflet:', err);
+          console.error('Google Maps load failed. Falling back to Leaflet:', err);
         }
       }
 
@@ -268,11 +289,14 @@
           await this.loadGoogleScript(activeKey);
           if (this.isGoogleMapsReady()) {
             this.initGoogleMaps(container, this.currentCenter, this.currentZoom);
+            console.log('Google Maps initialized successfully.');
             if (this.lastRenderArgs) {
               const { items, dayNumber, selectedItemId } = this.lastRenderArgs;
               this.render(items, dayNumber, selectedItemId);
             }
             return true;
+          } else {
+            console.error('Google Maps script loaded, but google.maps.Map is not available.');
           }
         } catch (err) {
           console.error('Failed to switch to Google Maps:', err);
