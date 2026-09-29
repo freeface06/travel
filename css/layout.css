@@ -550,13 +550,28 @@
     -webkit-tap-highlight-color: transparent;
   }
 
-  .m-nav-item:hover,
+  .m-nav-item:focus {
+    outline: none;
+  }
+
+  .m-nav-item:focus-visible {
+    outline: 2px solid var(--primary-500);
+    outline-offset: -2px;
+  }
+
   .m-nav-item.active {
-    color: var(--primary-600);
+    color: var(--primary-600) !important;
   }
 
   .m-nav-item.active .m-nav-label {
     font-weight: 700;
+  }
+
+  /* 마우스 호버가 지원되는 환경에서만 :hover 스타일 적용 (모바일 터치 시 잔류 방지) */
+  @media (hover: hover) and (pointer: fine) {
+    .m-nav-item:hover {
+      color: var(--primary-600);
+    }
   }
 
   .m-nav-icon {

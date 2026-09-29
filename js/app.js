@@ -79,12 +79,20 @@
   let activePickerCoord = null;
 
   /**
-   * 모바일 하단 네비게이션 활성 탭 UI 동기화
-   * @param {string} targetName 
+   * @intent 모바일 하단 내비게이션 활성 탭 UI 동기화 (targetName falsy 시 전 메뉴 비활성화 보장)
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   * @param {string|null} targetName 
    */
   function syncMobileNavActiveState(targetName) {
     if (!dom.mobileBottomNav) return;
-    const items = dom.mobileBottomNav.querySelectorAll('.m-nav-item[data-target]');
+    const items = dom.mobileBottomNav.querySelectorAll('.m-nav-item');
+    if (!targetName) {
+      items.forEach((btn) => btn.classList.remove('active'));
+      return;
+    }
     items.forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.target === targetName);
     });
@@ -107,7 +115,7 @@
   }
 
   /**
-   * @intent 모바일 바텀시트 상태 설정 및 인라인 트랜스폼 리셋 (CSS 클래스 기반 순수 transform 제어)
+   * @intent 모바일 바텀시트 상태 설정 및 인라인 트랜스폼 리셋 (hidden 시 하단 네비 비활성화 및 반응형 지도 리사이즈)
    * @agent  Gemini/manager-develop
    * @branch feat/mytriplog-core
    * @author @developer_name
@@ -124,7 +132,7 @@
     }
 
     if (state === 'hidden') {
-      syncMobileNavActiveState('map');
+      syncMobileNavActiveState(null);
     } else {
       syncMobileNavActiveState(store.getState().activeTab);
     }
@@ -1066,7 +1074,6 @@
       dom.modalOverlay.classList.add('picker-mode-active');
       previousSheetStateBeforePicker = currentSheetState;
       if (window.innerWidth <= 900) {
-        syncMobileNavActiveState('map');
         setBottomSheetState('hidden');
       }
       mapManager.invalidateSize();
@@ -2085,6 +2092,8 @@
       // 모바일 하단 내비게이션 탭 동기화
       if (currentSheetState !== 'hidden') {
         syncMobileNavActiveState(activeTab);
+      } else {
+        syncMobileNavActiveState(null);
       }
 
       // 지도 마커 및 동선 재렌더링
