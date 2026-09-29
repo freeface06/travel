@@ -20,8 +20,10 @@
   // DOM 요소 캐시
   const dom = {
     // 헤더 요소
+    brandInfo: document.getElementById('brand-info'),
     tripTitle: document.getElementById('trip-title'),
     tripPeriod: document.getElementById('trip-period'),
+    btnManageTrips: document.getElementById('btn-manage-trips'),
     btnCopyShareLink: document.getElementById('btn-copy-share-link'),
     btnEditTrip: document.getElementById('btn-edit-trip'),
 
@@ -1077,6 +1079,398 @@
   }
 
   /**
+   * @intent 여행 기간 포맷팅 (박/일수 계산)
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   * @param {string} startDate 
+   * @param {string} endDate 
+   * @returns {string} 기간 및 박수 문자열
+   */
+  function getTripDurationText(startDate, endDate) {
+    if (!startDate || !endDate) return '기간 미정';
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return `${startDate} ~ ${endDate}`;
+    }
+    const diffDays = Math.round((end - start) / (1000 * 60 * 60 * 24));
+    if (diffDays < 0) return `${startDate} ~ ${endDate}`;
+    if (diffDays === 0) return `${startDate} (당일치기)`;
+    return `${startDate} ~ ${endDate} (${diffDays}박 ${diffDays + 1}일)`;
+  }
+
+  /**
+   * @intent 여행 총 예상 경비 계산 (기준 통화 환산 합계)
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   * @param {object} trip 
+   * @returns {number} 기준 통화 환산 총합
+   */
+  function calculateTripTotalExpense(trip) {
+    if (!trip || !Array.isArray(trip.items) || trip.items.length === 0) return 0;
+    const rates = (trip.metadata && trip.metadata.customRates) || {};
+    const baseCurrency = (trip.metadata && trip.metadata.baseCurrency) || 'KRW';
+    let total = 0;
+    trip.items.forEach((item) => {
+      const cost = Number(item.cost) || 0;
+      if (cost > 0) {
+        total += TripExpense.convertCurrency(cost, item.currency || baseCurrency, baseCurrency, rates);
+      }
+    });
+    return Math.round(total);
+  }
+
+  /**
+   * @intent Day별 주요 일정 요약 목록 추출 (비교 뷰용)
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   * @param {object} trip 
+   * @returns {Array<{day: number, text: string}>} 일자별 요약 배열
+   */
+  function getTripDaySummaries(trip) {
+    const items = (trip && Array.isArray(trip.items)) ? trip.items : [];
+    if (items.length === 0) {
+      return [{ day: 1, text: '등록된 일정 없음' }];
+    }
+    const maxDay = Math.max(1, ...items.map((it) => Number(it.day) || 1));
+    const summaries = [];
+    for (let d = 1; d <= maxDay; d++) {
+      const dayItems = items.filter((it) => (Number(it.day) || 1) === d);
+      if (dayItems.length === 0) {
+        summaries.push({ day: d, text: '일정 없음' });
+      } else {
+        const titles = dayItems.slice(0, 3).map((it) => it.title || '일정').join(', ');
+        const more = dayItems.length > 3 ? ` 외 ${dayItems.length - 3}건` : '';
+        summaries.push({ day: d, text: `${titles}${more}` });
+      }
+    }
+    return summaries;
+  }
+
+  /**
+   * @intent 복수 여행 계획 관리 및 비교 모달 팝업 열기
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   * @param {'list'|'compare'} initialTab - 초기 활성 탭
+   */
+  function openTripManagerModal(initialTab = 'list') {
+    const trips = store.getTrips();
+    const currentTripId = store.getState().currentTripId;
+
+    const renderContent = (activeTab) => {
+      let html = `
+        <div class="trip-modal-tabs" role="tablist">
+          <button type="button" class="trip-modal-tab-btn${activeTab === 'list' ? ' active' : ''}" data-tab="list" role="tab">
+            ${getIcon('FOLDER', { size: 16 })}
+            <span>계획 목록 (${trips.length})</span>
+          </button>
+          <button type="button" class="trip-modal-tab-btn${activeTab === 'compare' ? ' active' : ''}" data-tab="compare" role="tab">
+            ${getIcon('COMPARE', { size: 16 })}
+            <span>계획 한눈에 비교</span>
+          </button>
+        </div>
+      `;
+
+      if (activeTab === 'list') {
+        html += `
+          <div class="trip-manager-toolbar">
+            <span class="trip-manager-count">총 ${trips.length}개의 여행 계획이 보관되어 있습니다.</span>
+            <button type="button" id="btn-open-create-trip" class="btn-create-trip">
+              ${getIcon('PLUS', { size: 16 })}
+              <span>새 여행 계획 만들기</span>
+            </button>
+          </div>
+          <div class="trip-card-grid">
+        `;
+
+        trips.forEach((trip) => {
+          const isSelected = trip.metadata && trip.metadata.id === currentTripId;
+          const totalCost = calculateTripTotalExpense(trip);
+          const baseCurrency = (trip.metadata && trip.metadata.baseCurrency) || 'KRW';
+          const durationText = getTripDurationText(trip.metadata && trip.metadata.startDate, trip.metadata && trip.metadata.endDate);
+          const itemCount = (trip.items || []).length;
+          const tripId = (trip.metadata && trip.metadata.id) || '';
+
+          html += `
+            <div class="trip-plan-card${isSelected ? ' is-selected' : ''}" data-id="${escapeHtml(tripId)}">
+              <div class="trip-card-header">
+                <div class="trip-card-title-wrap">
+                  <div class="trip-card-title">${escapeHtml((trip.metadata && trip.metadata.title) || '새로운 여행 계획')}</div>
+                </div>
+                ${isSelected ? `<span class="badge-selected">[선택됨]</span>` : ''}
+              </div>
+
+              <div class="trip-card-meta">
+                <div class="trip-card-meta-row">
+                  <span class="trip-card-meta-label">여행 기간</span>
+                  <span class="trip-card-meta-val">${escapeHtml(durationText)}</span>
+                </div>
+                <div class="trip-card-meta-row">
+                  <span class="trip-card-meta-label">등록 일정</span>
+                  <span class="trip-card-meta-val">${itemCount}개</span>
+                </div>
+                <div class="trip-card-meta-row">
+                  <span class="trip-card-meta-label">총 경비</span>
+                  <span class="trip-card-meta-val">${formatAmount(totalCost, baseCurrency)}</span>
+                </div>
+              </div>
+
+              <div class="trip-card-actions">
+                ${
+                  isSelected
+                    ? `<button type="button" class="btn btn-secondary btn-sm" disabled>선택 중</button>`
+                    : `<button type="button" class="btn btn-primary btn-sm btn-select-trip" data-id="${escapeHtml(tripId)}">이 계획 선택</button>`
+                }
+                <button type="button" class="btn btn-outline btn-sm btn-duplicate-trip" data-id="${escapeHtml(tripId)}" title="계획 복제">
+                  ${getIcon('COPY', { size: 14 })}
+                  <span>복제</span>
+                </button>
+                ${
+                  trips.length > 1
+                    ? `<button type="button" class="btn btn-danger btn-sm btn-delete-trip" data-id="${escapeHtml(tripId)}" title="계획 삭제">
+                        ${getIcon('DELETE', { size: 14 })}
+                      </button>`
+                    : ''
+                }
+              </div>
+            </div>
+          `;
+        });
+
+        html += `</div>`;
+      } else {
+        // compare 탭 (계획 한눈에 비교 뷰)
+        html += `
+          <div class="trip-compare-container">
+            <div class="trip-compare-grid">
+        `;
+
+        trips.forEach((trip) => {
+          const isSelected = trip.metadata && trip.metadata.id === currentTripId;
+          const totalCost = calculateTripTotalExpense(trip);
+          const baseCurrency = (trip.metadata && trip.metadata.baseCurrency) || 'KRW';
+          const durationText = getTripDurationText(trip.metadata && trip.metadata.startDate, trip.metadata && trip.metadata.endDate);
+          const itemCount = (trip.items || []).length;
+          const daySummaries = getTripDaySummaries(trip);
+          const tripId = (trip.metadata && trip.metadata.id) || '';
+
+          html += `
+            <div class="trip-compare-card${isSelected ? ' is-current' : ''}">
+              <div class="trip-compare-header">
+                <div class="trip-compare-title">${escapeHtml((trip.metadata && trip.metadata.title) || '새로운 여행 계획')}</div>
+                ${isSelected ? `<span class="badge-selected">[현재 활성]</span>` : ''}
+              </div>
+
+              <div class="trip-compare-stats">
+                <div class="trip-compare-stat-item">
+                  <span class="trip-compare-stat-label">기간</span>
+                  <span class="trip-compare-stat-val">${escapeHtml(durationText)}</span>
+                </div>
+                <div class="trip-compare-stat-item">
+                  <span class="trip-compare-stat-label">총 예상 경비</span>
+                  <span class="trip-compare-stat-val">${formatAmount(totalCost, baseCurrency)}</span>
+                </div>
+                <div class="trip-compare-stat-item">
+                  <span class="trip-compare-stat-label">방문지 / 일정</span>
+                  <span class="trip-compare-stat-val">${itemCount}개</span>
+                </div>
+                <div class="trip-compare-stat-item">
+                  <span class="trip-compare-stat-label">참가 인원</span>
+                  <span class="trip-compare-stat-val">${((trip.metadata && trip.metadata.participants) || []).length}명</span>
+                </div>
+              </div>
+
+              <div style="font-size:0.8rem; font-weight:700; color:var(--text-main); margin-bottom:6px;">
+                Day별 주요 일정 요약
+              </div>
+              <div class="trip-compare-day-list">
+          `;
+
+          daySummaries.forEach((sum) => {
+            html += `
+              <div class="trip-compare-day-item">
+                <span class="trip-compare-day-badge">Day ${sum.day}</span>
+                <span class="trip-compare-day-summary">${escapeHtml(sum.text)}</span>
+              </div>
+            `;
+          });
+
+          html += `
+              </div>
+
+              <div class="trip-compare-actions">
+                ${
+                  isSelected
+                    ? `<button type="button" class="btn btn-secondary btn-sm" style="width:100%;" disabled>현재 보는 중</button>`
+                    : `<button type="button" class="btn btn-primary btn-sm btn-select-trip" data-id="${escapeHtml(tripId)}" style="width:100%;">이 계획으로 보기</button>`
+                }
+              </div>
+            </div>
+          `;
+        });
+
+        html += `
+            </div>
+          </div>
+        `;
+      }
+
+      return html;
+    };
+
+    openModal('여행 계획 관리 및 비교', renderContent(initialTab));
+
+    function bindEvents(activeTab) {
+      // 서브 탭 전환 이벤트
+      dom.modalContainer.querySelectorAll('.trip-modal-tab-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const nextTab = btn.dataset.tab;
+          dom.modalContainer.innerHTML = renderContent(nextTab);
+          bindEvents(nextTab);
+        });
+      });
+
+      // 새 여행 계획 생성 버튼 이벤트
+      document.getElementById('btn-open-create-trip')?.addEventListener('click', () => {
+        openCreateTripModal();
+      });
+
+      // 계획 선택 이벤트
+      dom.modalContainer.querySelectorAll('.btn-select-trip').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const tripId = btn.dataset.id;
+          const target = store.switchTrip(tripId);
+          if (target) {
+            closeModal();
+            showToast(`'${target.metadata.title || '선택한'}' 계획으로 전환되었습니다.`);
+          }
+        });
+      });
+
+      // 계획 복제 이벤트
+      dom.modalContainer.querySelectorAll('.btn-duplicate-trip').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const tripId = btn.dataset.id;
+          const duplicated = store.duplicateTrip(tripId);
+          if (duplicated) {
+            closeModal();
+            showToast(`'${duplicated.metadata.title}' 계획이 복제되었습니다.`);
+          }
+        });
+      });
+
+      // 계획 삭제 이벤트
+      dom.modalContainer.querySelectorAll('.btn-delete-trip').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const tripId = btn.dataset.id;
+          const targetTrip = store.getTrips().find((t) => t.metadata && t.metadata.id === tripId);
+          const targetTitle = (targetTrip && targetTrip.metadata && targetTrip.metadata.title) || '이 여행 계획';
+          if (confirm(`'${targetTitle}' 여행 계획을 완전히 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.`)) {
+            const success = store.deleteTrip(tripId);
+            if (success) {
+              showToast(`'${targetTitle}' 계획이 삭제되었습니다.`);
+              openTripManagerModal('list');
+            } else {
+              showToast('최소 1개의 여행 계획은 유지되어야 하므로 삭제할 수 없습니다.');
+            }
+          }
+        });
+      });
+    }
+
+    bindEvents(initialTab);
+  }
+
+  /**
+   * @intent 신규 여행 계획 생성 모달 폼 열기
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   */
+  function openCreateTripModal() {
+    const contentHtml = `
+      <form id="create-trip-form" class="editor-form">
+        <div class="form-group">
+          <label class="form-label" for="create-trip-title">여행 제목 <span class="required">*</span></label>
+          <input type="text" id="create-trip-title" name="title" class="form-control" required placeholder="예: 오사카 3박 4일 미식 탐방" value="" />
+        </div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label class="form-label" for="create-trip-start">출발일</label>
+            <input type="date" id="create-trip-start" name="startDate" class="form-control" value="" />
+          </div>
+          <div class="form-group flex-1">
+            <label class="form-label" for="create-trip-end">도착일</label>
+            <input type="date" id="create-trip-end" name="endDate" class="form-control" value="" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="create-trip-participants">참가자 명단 (콤마 구분)</label>
+          <input type="text" id="create-trip-participants" name="participants" class="form-control" placeholder="예: 신랑, 신부 또는 민우, 지훈, 서연" value="신랑, 신부" />
+          <span style="font-size:0.72rem; color:var(--text-muted); margin-top:2px;">
+            1/N 정산에 참여할 멤버들의 이름을 쉼표로 구분하여 입력해 주세요.
+          </span>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="create-trip-currency">정산 기준 통화</label>
+          <select id="create-trip-currency" name="baseCurrency" class="form-control">
+            <option value="KRW" selected>KRW (대한민국 원)</option>
+            <option value="JPY">JPY (일본 엔)</option>
+            <option value="USD">USD (미국 달러)</option>
+            <option value="EUR">EUR (유럽 유로)</option>
+          </select>
+        </div>
+        <div class="modal-form-actions">
+          <button type="button" id="btn-create-trip-cancel" class="btn btn-secondary">취소</button>
+          <button type="submit" class="btn btn-primary">
+            ${getIcon('CHECK', { size: 16 })} <span>새 계획 만들기</span>
+          </button>
+        </div>
+      </form>
+    `;
+
+    openModal('새 여행 계획 만들기', contentHtml);
+
+    document.getElementById('btn-create-trip-cancel')?.addEventListener('click', () => {
+      openTripManagerModal('list');
+    });
+
+    document.getElementById('create-trip-form')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const title = form.title.value.trim() || '새로운 여행 계획';
+      const startDate = form.startDate.value;
+      const endDate = form.endDate.value;
+      const rawParticipants = form.participants.value;
+      const participants = rawParticipants
+        .split(',')
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0);
+      const baseCurrency = form.baseCurrency.value || 'KRW';
+
+      const newTrip = store.createTrip({
+        title,
+        startDate,
+        endDate,
+        participants: participants.length > 0 ? participants : ['신랑', '신부'],
+        baseCurrency
+      });
+
+      closeModal();
+      showToast(`'${newTrip.metadata.title}' 계획이 생성되었습니다.`);
+    });
+  }
+
+  /**
    * 앱 초기화 및 이벤트 리스너 바인딩
    */
   function initApp() {
@@ -1324,7 +1718,27 @@
       setTimeout(() => mapManager.invalidateSize(), 300);
     });
 
-    // 13. 상단 헤더 액션 버튼
+    // 13. 상단 헤더 액션 및 여행 관리 버튼
+    dom.btnManageTrips?.addEventListener('click', () => {
+      openTripManagerModal('list');
+    });
+
+    dom.brandInfo?.addEventListener('click', () => {
+      openTripManagerModal('list');
+    });
+
+    dom.brandInfo?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openTripManagerModal('list');
+      }
+    });
+
+    dom.tripTitle?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openTripManagerModal('list');
+    });
+
     dom.btnCopyShareLink?.addEventListener('click', async () => {
       const currentTrip = store.getState().trip;
       const shareUrl = generateShareUrl(currentTrip);

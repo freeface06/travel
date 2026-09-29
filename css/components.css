@@ -796,6 +796,297 @@
 }
 
 /* ==========================================================================
+   복수 여행 계획(Multi-Trip) 관리 및 비교 UI 스타일
+   ========================================================================== */
+
+/* 모달 내 서브 탭 ([계획 목록], [계획 비교]) */
+.trip-modal-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 2px solid var(--border-subtle);
+  margin-bottom: 18px;
+  padding-bottom: 2px;
+}
+
+.trip-modal-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: all var(--transition-fast);
+  background: transparent;
+  cursor: pointer;
+}
+
+.trip-modal-tab-btn:hover {
+  color: var(--text-main);
+}
+
+.trip-modal-tab-btn.active {
+  color: var(--primary-600);
+  border-bottom-color: var(--primary-600);
+}
+
+/* 상단 액션 툴바 및 생성 버튼 */
+.trip-manager-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  gap: 12px;
+}
+
+.trip-manager-count {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.btn-create-trip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background-color: var(--primary-600);
+  color: #ffffff;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all var(--transition-fast);
+  cursor: pointer;
+}
+
+.btn-create-trip:hover {
+  background-color: var(--primary-700);
+}
+
+/* 여행 계획 카드 그리드 */
+.trip-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.trip-plan-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background-color: #ffffff;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.trip-plan-card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--primary-400);
+}
+
+.trip-plan-card.is-selected {
+  border-color: var(--primary-600);
+  border-width: 2px;
+  background-color: #fafcff;
+}
+
+.trip-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.trip-card-title-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.trip-card-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.35;
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+
+.badge-selected {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  background-color: #e0e7ff;
+  color: #4338ca;
+  font-size: 0.72rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.trip-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.trip-card-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.trip-card-meta-label {
+  color: var(--gray-500);
+  min-width: 58px;
+}
+
+.trip-card-meta-val {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.trip-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.trip-card-actions .btn {
+  flex: 1;
+}
+
+.trip-card-actions .btn-delete-trip {
+  flex: 0 0 auto;
+}
+
+/* 여행 계획 한눈에 비교 뷰 (Comparison View) */
+.trip-compare-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.trip-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.trip-compare-card {
+  display: flex;
+  flex-direction: column;
+  background-color: #ffffff;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-fast);
+}
+
+.trip-compare-card.is-current {
+  border-color: var(--primary-600);
+  border-width: 2px;
+  background-color: #fafcff;
+}
+
+.trip-compare-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.trip-compare-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-main);
+  word-break: break-word;
+}
+
+.trip-compare-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  background-color: var(--gray-50);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  margin-bottom: 14px;
+}
+
+.trip-compare-stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trip-compare-stat-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.trip-compare-stat-val {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.trip-compare-day-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.trip-compare-day-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.78rem;
+  padding: 6px 8px;
+  background-color: #f8fafc;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--primary-500);
+}
+
+.trip-compare-day-badge {
+  font-weight: 700;
+  color: var(--primary-700);
+}
+
+.trip-compare-day-summary {
+  color: var(--text-main);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.trip-compare-actions {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ==========================================================================
    컴포넌트 모바일 반응형 미디어 쿼리 (640px 이하)
    ========================================================================== */
 @media (max-width: 640px) {
@@ -908,6 +1199,28 @@
     text-align: center;
     font-size: 0.8rem;
     padding: 8px 14px;
+  }
+
+  /* 복수 여행 카드 및 비교 뷰 모바일 최적화 */
+  .trip-card-grid,
+  .trip-compare-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .trip-modal-tabs {
+    gap: 4px;
+  }
+
+  .trip-modal-tab-btn {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+  }
+
+  .trip-manager-toolbar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 }
 

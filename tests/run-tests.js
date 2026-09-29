@@ -313,6 +313,104 @@ runTest('6-2. 아이콘 모듈에 유니코드 이모지가 전혀 포함되지 
 });
 
 // --------------------------------------------------------------------------
+// 7. 복수 여행 계획(Multi-Trip) 관리 및 전환 엔진 검증
+// --------------------------------------------------------------------------
+console.log('\n--- [Suite 7: 복수 여행 계획(Multi-Trip) 관리 및 전환 엔진 검증] ---');
+
+runTest('7-1. 복수 여행 초기화 및 기본 여행 목록 확보', () => {
+  const store = new TripStore.Store();
+  const trips = store.getTrips();
+  const currentTrip = store.getCurrentTrip();
+
+  assert.ok(Array.isArray(trips));
+  assert.strictEqual(trips.length, 1);
+  assert.ok(currentTrip);
+  assert.strictEqual(currentTrip.metadata.id, store.getState().currentTripId);
+  assert.strictEqual(currentTrip, trips[0]);
+});
+
+runTest('7-2. 신규 여행 계획 추가 (createTrip) 및 활성 전환 검증', () => {
+  const store = new TripStore.Store();
+  const initialCount = store.getTrips().length;
+
+  const newTrip = store.createTrip({
+    title: '제주도 3박 4일 힐링 투어',
+    startDate: '2026-11-01',
+    endDate: '2026-11-04',
+    participants: ['철수', '영희'],
+    baseCurrency: 'KRW'
+  });
+
+  assert.strictEqual(store.getTrips().length, initialCount + 1);
+  assert.strictEqual(store.getState().currentTripId, newTrip.metadata.id);
+  assert.strictEqual(store.getCurrentTrip().metadata.title, '제주도 3박 4일 힐링 투어');
+  assert.strictEqual(store.getState().selectedDay, 1);
+  assert.strictEqual(store.getState().selectedItemId, null);
+});
+
+runTest('7-3. 여행 계획 간 자유로운 전환 (switchTrip) 및 상태 동기화 검증', () => {
+  const store = new TripStore.Store();
+  const trip1Id = store.getState().currentTripId;
+  const trip2 = store.createTrip({ title: '오사카 먹방 투어' });
+  const trip2Id = trip2.metadata.id;
+  assert.strictEqual(store.getState().currentTripId, trip2Id);
+
+  // trip1으로 다시 전환
+  const switched = store.switchTrip(trip1Id);
+  assert.ok(switched);
+  assert.strictEqual(switched.metadata.id, trip1Id);
+  assert.strictEqual(store.getState().currentTripId, trip1Id);
+  assert.strictEqual(store.getCurrentTrip().metadata.id, trip1Id);
+  assert.strictEqual(store.getState().selectedDay, 1);
+  assert.strictEqual(store.getState().selectedItemId, null);
+});
+
+runTest('7-4. 기존 여행 계획 복제 (duplicateTrip) 및 독립적 수정 검증', () => {
+  const store = new TripStore.Store();
+  const originalTrip = store.getCurrentTrip();
+  const originalItemsCount = originalTrip.items.length;
+  const duplicated = store.duplicateTrip(originalTrip.metadata.id);
+
+  assert.ok(duplicated);
+  assert.notStrictEqual(duplicated.metadata.id, originalTrip.metadata.id);
+  assert.ok(duplicated.metadata.title.includes('(사본)'));
+  assert.strictEqual(store.getState().currentTripId, duplicated.metadata.id);
+  assert.strictEqual(duplicated.items.length, originalItemsCount);
+
+  // 복제본에 일정 추가 시 원본 여행에는 영향이 없어야 함 (독립성 보장)
+  store.addItem({
+    title: '복제본 전용 일정 아이템',
+    category: 'ATTRACTION',
+    cost: 50000,
+    currency: 'KRW'
+  });
+
+  assert.strictEqual(store.getCurrentTrip().items.length, originalItemsCount + 1);
+  const foundOriginal = store.getTrips().find((t) => t.metadata.id === originalTrip.metadata.id);
+  assert.strictEqual(foundOriginal.items.length, originalItemsCount);
+});
+
+runTest('7-5. 여행 계획 삭제 (deleteTrip) 및 최소 1개 유지 방어 검증', () => {
+  const store = new TripStore.Store();
+  // 1개만 있을 때 삭제 시도 -> 실패(false) 및 유지
+  assert.strictEqual(store.getTrips().length, 1);
+  const deleteResult1 = store.deleteTrip(store.getState().currentTripId);
+  assert.strictEqual(deleteResult1, false);
+  assert.strictEqual(store.getTrips().length, 1);
+
+  // 2개로 만든 후 현재 활성 여행 삭제 시 남은 첫 번째 여행으로 자동 전환
+  const trip2 = store.createTrip({ title: '삭제 테스트용 여행' });
+  assert.strictEqual(store.getTrips().length, 2);
+  assert.strictEqual(store.getState().currentTripId, trip2.metadata.id);
+
+  const deleteResult2 = store.deleteTrip(trip2.metadata.id);
+  assert.strictEqual(deleteResult2, true);
+  assert.strictEqual(store.getTrips().length, 1);
+  assert.notStrictEqual(store.getState().currentTripId, trip2.metadata.id);
+  assert.strictEqual(store.getState().currentTripId, store.getTrips()[0].metadata.id);
+});
+
+// --------------------------------------------------------------------------
 // 결과 종합 요약
 // --------------------------------------------------------------------------
 console.log('\n====================================================');
