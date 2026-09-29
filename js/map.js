@@ -122,7 +122,7 @@
         if (existing) existing.remove();
 
         const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey.trim())}&libraries=places&language=ko&region=KR`;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey.trim())}&libraries=places&language=ko&region=KR&loading=async`;
         script.async = true;
         script.defer = true;
         script.onload = () => resolve();
@@ -292,6 +292,31 @@
       }
     }
 
+    /**
+     * Google Maps 인증/활성화 실패 시 Leaflet(OpenStreetMap)으로 무오류 즉시 폴백
+     */
+    fallbackToLeaflet(reason = '') {
+      if (this.engine === 'leaflet') return;
+      this.engine = 'leaflet';
+      console.warn('Google Maps error detected, fallback to Leaflet:', reason);
+
+      const container = document.getElementById(this.containerId);
+      if (!container) return;
+
+      container.innerHTML = '';
+      this.map = null;
+      this.markers = [];
+      this.polylines = [];
+      this.markerMap.clear();
+
+      this.initLeaflet(container, this.currentCenter, this.currentZoom);
+
+      if (this.lastRenderArgs) {
+        const { items, dayNumber, selectedItemId } = this.lastRenderArgs;
+        this.render(items, dayNumber, selectedItemId);
+      }
+    }
+
     setMarkerClickListener(listener) {
       this.onMarkerClickListener = listener;
     }
@@ -368,6 +393,7 @@
      * 특정 일차(Day)의 아이템 렌더링
      */
     render(items = [], dayNumber = 1, selectedItemId = null) {
+      this.lastRenderArgs = { items, dayNumber, selectedItemId };
       if (!this.map) {
         this.pendingRender = { items, dayNumber, selectedItemId };
         return;
@@ -535,6 +561,15 @@
 
 
   const mapManager = new TripMapManager();
+
+  // Google Maps API 인증 및 활성화 실패(ApiNotActivatedMapError 등) 시 전역 폴백 등록
+  if (typeof window !== 'undefined') {
+    window.gm_authFailure = function () {
+      console.warn('Google Maps API auth failure detected (ApiNotActivatedMapError). Auto-fallback to Leaflet.');
+      mapManager.fallbackToLeaflet('ApiNotActivatedMapError');
+    };
+  }
+
   return {
     TripMapManager,
     mapManager,

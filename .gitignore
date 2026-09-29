@@ -6,7 +6,6 @@ CLAUDE.md
 .cursorrules
 .cursor/
 .gemini/
-.github/
 .aider*
 # Local AI Agent Workspace & Mounted Skills (Managed by pull/push)
 .agents/
