@@ -1,5 +1,5 @@
 /**
- * @intent 모바일 바텀시트 손잡이 1:1 실시간 추종 및 바디 영역 양방향 스와이프 제스처(위로 올려 확장, 아래로 당겨 축소/닫기) 오케스트레이터
+ * @intent 모바일 바텀시트 풀화면 시 상단 헤더(60px) 가림 방지 높이(122px 오프셋) 연동 및 손잡이 1:1 실시간 추종/바디 양방향 스와이프 제스처 오케스트레이터
  * @agent  Gemini/manager-develop
  * @branch feat/mytriplog-core
  * @author @developer_name
@@ -255,7 +255,7 @@
       lastTime = performance.now();
       velocity = 0;
 
-      panelHeight = panel.getBoundingClientRect().height || (window.innerHeight - 62);
+      panelHeight = panel.getBoundingClientRect().height || (window.innerHeight - 122);
       baseY = getBaseYForState(currentSheetState, panelHeight);
 
       panel.classList.add('is-dragging');
@@ -405,7 +405,7 @@
       isBodyDragging = false;
       initialScrollTop = contentArea ? contentArea.scrollTop : 0;
 
-      panelHeight = panel.getBoundingClientRect().height || (window.innerHeight - 62);
+      panelHeight = panel.getBoundingClientRect().height || (window.innerHeight - 122);
       baseY = getBaseYForState(currentSheetState, panelHeight);
     }
 
