@@ -1,5 +1,5 @@
 /**
- * @intent 메인 애플리케이션 진입점 및 전역 이벤트 오케스트레이터 (공동 결제 및 KRW 단일 통화 대시보드)
+ * @intent 메인 애플리케이션 진입점 및 전역 이벤트 오케스트레이터 (지도 플로팅 컨트롤 제거 및 클린 뷰포트 확보)
  * @agent  Gemini/manager-develop
  * @branch feat/mytriplog-core
  * @author @developer_name
@@ -44,10 +44,6 @@
     mNavTimeline: document.getElementById('m-nav-timeline'),
     mNavAdd: document.getElementById('m-nav-add'),
     mNavExpense: document.getElementById('m-nav-expense'),
-
-    // 지도 컨트롤
-    btnPinDropToggle: document.getElementById('btn-pin-drop-toggle'),
-    btnAddItemFloating: document.getElementById('btn-add-item-floating'),
 
     // 지도 핀 위치 선택 플로팅 바 (Pin Picker Bar)
     pinPickerBar: document.getElementById('pin-picker-bar'),
@@ -755,7 +751,6 @@
     dom.modalOverlay.classList.remove('is-open', 'picker-mode-active');
     dom.modalContainer.innerHTML = '';
     mapManager.setPinDropMode(false);
-    dom.btnPinDropToggle?.classList.remove('active');
     dom.pinPickerBar?.classList.add('hidden');
     activePickerCoord = null;
     if (typeof document !== 'undefined' && document.body) {
@@ -865,7 +860,6 @@
         dom.btnPinPickerConfirm.disabled = true;
       }
       mapManager.setPinDropMode(true);
-      dom.btnPinDropToggle?.classList.add('active');
       activePickerCoord = null;
 
       showToast('지도를 클릭하여 위치를 지정해 주세요.');
@@ -1611,7 +1605,6 @@
 
       // 핀 모드 종료 및 모달 복귀 확실성 보장
       mapManager.setPinDropMode(false);
-      dom.btnPinDropToggle?.classList.remove('active');
       dom.pinPickerBar?.classList.add('hidden');
       dom.modalOverlay.classList.remove('picker-mode-active');
       dom.modalOverlay.classList.add('is-open');
@@ -1636,7 +1629,6 @@
      */
     dom.btnPinPickerCancel?.addEventListener('click', () => {
       mapManager.setPinDropMode(false);
-      dom.btnPinDropToggle?.classList.remove('active');
       dom.pinPickerBar?.classList.add('hidden');
       dom.modalOverlay.classList.remove('picker-mode-active');
       dom.modalOverlay.classList.add('is-open');
@@ -1651,24 +1643,7 @@
       showToast('위치 선택을 취소했습니다.');
     });
 
-    // 5. 플로팅 핀 드롭 토글 버튼
-    dom.btnPinDropToggle?.addEventListener('click', () => {
-      const isPinDrop = !store.getState().pinDropMode;
-      store.setPinDropMode(isPinDrop);
-      mapManager.setPinDropMode(isPinDrop);
-      if (isPinDrop) {
-        dom.btnPinDropToggle.classList.add('active');
-        showToast('지도 클릭 핀 지정 모드가 켜졌습니다.');
-      } else {
-        dom.btnPinDropToggle.classList.remove('active');
-        showToast('핀 지정 모드가 꺼졌습니다.');
-      }
-    });
-
-    // 6. 플로팅 + 일정 추가 버튼
-    dom.btnAddItemFloating?.addEventListener('click', () => openItemModal());
-
-    // 7. 내비게이션 탭 이벤트 (일정, 경비)
+    // 5. 내비게이션 탭 이벤트 (일정, 경비)
     dom.tabTimeline.addEventListener('click', () => {
       store.setActiveTab('timeline');
       if (currentSheetState === 'hidden') setBottomSheetState('half');
@@ -1678,7 +1653,7 @@
       if (currentSheetState === 'hidden') setBottomSheetState('half');
     });
 
-    // 8. 모바일 하단 내비게이션 바 버튼 리스너 (지도, 일정, 추가, 경비)
+    // 6. 모바일 하단 내비게이션 바 버튼 리스너 (지도, 일정, 추가, 경비)
     dom.mNavMap?.addEventListener('click', () => {
       setBottomSheetState('hidden');
       showToast('지도 전체화면 모드');

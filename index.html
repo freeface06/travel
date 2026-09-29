@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <!--
-    @intent MyTripLog 단일 진실 원천(SSOT) 진입점 웹 애플리케이션
+    @intent MyTripLog 단일 진실 원천(SSOT) 진입점 웹 애플리케이션 (지도 플로팅 컨트롤 정리 및 클린 지도 뷰포트 확보)
     @agent  Gemini/manager-develop
     @branch feat/mytriplog-core
     @author @developer_name
@@ -29,10 +29,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js" crossorigin=""></script>
 
   <!-- 스타일시트 (캐시 버스팅 적용) -->
-  <link rel="stylesheet" href="css/reset.css?v=20260929_1640" />
-  <link rel="stylesheet" href="css/variables.css?v=20260929_1640" />
-  <link rel="stylesheet" href="css/layout.css?v=20260929_1640" />
-  <link rel="stylesheet" href="css/components.css?v=20260929_1640" />
+  <link rel="stylesheet" href="css/reset.css?v=20260929_1648" />
+  <link rel="stylesheet" href="css/variables.css?v=20260929_1648" />
+  <link rel="stylesheet" href="css/layout.css?v=20260929_1648" />
+  <link rel="stylesheet" href="css/components.css?v=20260929_1648" />
 </head>
 <body>
   <div class="app-container">
@@ -146,22 +146,6 @@
             </div>
           </div>
         </div>
-
-        <!-- 플로팅 컨트롤 -->
-        <div class="map-floating-controls">
-          <button type="button" id="btn-pin-drop-toggle" class="btn-floating" title="지도 위 직접 클릭하여 핀 지정 모드">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-            </svg>
-            <span>핀 지정 모드</span>
-          </button>
-          <button type="button" id="btn-add-item-floating" class="btn-floating active" title="새 일정 추가">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-            </svg>
-            <span>일정 추가</span>
-          </button>
-        </div>
       </section>
     </main>
 
@@ -254,14 +238,14 @@
   <div class="toast-container" id="toast-container"></div>
 
   <!-- 스크립트 모듈 로드 (캐시 버스팅 적용) -->
-  <script src="js/icons.js?v=20260929_1640"></script>
-  <script src="js/db.js?v=20260929_1640"></script>
-  <script src="js/expense.js?v=20260929_1640"></script>
-  <script src="js/store.js?v=20260929_1640"></script>
-  <script src="js/geocoder.js?v=20260929_1640"></script>
-  <script src="js/map.js?v=20260929_1640"></script>
-  <script src="js/forms.js?v=20260929_1640"></script>
-  <script src="js/share.js?v=20260929_1640"></script>
-  <script src="js/app.js?v=20260929_1640"></script>
+  <script src="js/icons.js?v=20260929_1648"></script>
+  <script src="js/db.js?v=20260929_1648"></script>
+  <script src="js/expense.js?v=20260929_1648"></script>
+  <script src="js/store.js?v=20260929_1648"></script>
+  <script src="js/geocoder.js?v=20260929_1648"></script>
+  <script src="js/map.js?v=20260929_1648"></script>
+  <script src="js/forms.js?v=20260929_1648"></script>
+  <script src="js/share.js?v=20260929_1648"></script>
+  <script src="js/app.js?v=20260929_1648"></script>
 </body>
 </html>
