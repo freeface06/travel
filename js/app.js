@@ -125,6 +125,28 @@
   }
 
   /**
+   * @intent 구글맵 좌표 문자열(위도, 경도) 파싱 유틸리티 - 복사된 다양한 형식(쉼표, 공백, 괄호 등)을 분석하여 위도/경도 객체 추출
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   * @param {string} str - 좌표 문자열
+   * @returns {{lat: number, lng: number}|null} 유효한 좌표 객체 또는 null
+   */
+  const parseCoordinates = (typeof TripForms !== 'undefined' && typeof TripForms.parseCoordinates === 'function')
+    ? TripForms.parseCoordinates
+    : function (str) {
+        if (!str) return null;
+        const clean = str.replace(/[()]/g, '').trim();
+        const match = clean.match(/^(-?\d+(?:\.\d+)?)[,\s/]+(-?\d+(?:\.\d+)?)$/);
+        if (!match) return null;
+        const lat = parseFloat(match[1]);
+        const lng = parseFloat(match[2]);
+        if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+        return { lat, lng };
+      };
+
+  /**
    * @intent 모바일 바텀시트 상태 설정 및 인라인 트랜스폼 리셋 (hidden 시 하단 네비 비활성화 및 반응형 지도 리사이즈)
    * @agent  Gemini/manager-develop
    * @branch feat/mytriplog-core
@@ -1034,52 +1056,105 @@
       });
     });
 
-    // 위치 초기화 버튼 (#btn-clear-location)
+    // 위치 및 구글맵 좌표 처리 (#coord-paste-input, #item-lat, #item-lng, #btn-clear-location)
     /**
-     * @intent 지정된 위치(위도, 경도, 장소명) 초기화 및 UI 뱃지/버튼 상태 리셋
+     * @intent 구글맵 좌표 자동 파싱, 위도/경도 직접 입력 양방향 동기화 및 좌표 초기화/핀 연동
      * @agent  Gemini/manager-develop
      * @branch feat/mytriplog-core
      * @author @developer_name
      * @date   2026-09-29
      */
-    const clearLocationBtn = document.getElementById('btn-clear-location');
-    clearLocationBtn?.addEventListener('click', () => {
-      const latInput = document.getElementById('item-lat');
-      const lngInput = document.getElementById('item-lng');
+    const coordPasteInput = document.getElementById('coord-paste-input');
+    const btnApplyCoordPaste = document.getElementById('btn-apply-coord-paste');
+    const itemLatInput = document.getElementById('item-lat');
+    const itemLngInput = document.getElementById('item-lng');
+    const btnClearLocation = document.getElementById('btn-clear-location');
+    const pickOnMapBtn = document.getElementById('btn-pick-on-map');
+
+    let lastAutoParsedText = '';
+
+    function tryAutoParseCoord(text) {
+      if (!text || text.trim() === lastAutoParsedText) return;
+      const parsed = parseCoordinates(text);
+      if (parsed) {
+        lastAutoParsedText = text.trim();
+        if (itemLatInput) itemLatInput.value = parsed.lat;
+        if (itemLngInput) itemLngInput.value = parsed.lng;
+        if (btnClearLocation) btnClearLocation.classList.remove('hidden');
+        showToast(`구글맵 좌표가 자동으로 인식되었습니다: ${parsed.lat.toFixed(4)}, ${parsed.lng.toFixed(4)}`);
+      }
+    }
+
+    if (coordPasteInput) {
+      // 붙여넣기 이벤트
+      coordPasteInput.addEventListener('paste', () => {
+        setTimeout(() => {
+          tryAutoParseCoord(coordPasteInput.value);
+        }, 0);
+      });
+
+      // 입력 이벤트
+      coordPasteInput.addEventListener('input', () => {
+        tryAutoParseCoord(coordPasteInput.value);
+      });
+    }
+
+    // 좌표 즉시 적용 버튼 (#btn-apply-coord-paste)
+    btnApplyCoordPaste?.addEventListener('click', () => {
+      const val = coordPasteInput ? coordPasteInput.value.trim() : '';
+      const parsed = parseCoordinates(val);
+      if (parsed) {
+        lastAutoParsedText = val;
+        if (itemLatInput) itemLatInput.value = parsed.lat;
+        if (itemLngInput) itemLngInput.value = parsed.lng;
+        if (btnClearLocation) btnClearLocation.classList.remove('hidden');
+        showToast(`구글맵 좌표가 자동으로 인식되었습니다: ${parsed.lat.toFixed(4)}, ${parsed.lng.toFixed(4)}`);
+      } else {
+        showToast('올바른 좌표 형식(예: 35.6585, 139.7454)을 입력해 주세요.');
+      }
+    });
+
+    // 위도(#item-lat) 및 경도(#item-lng) 직접 입력 (input 이벤트)
+    function handleDirectCoordInput() {
+      const latVal = itemLatInput ? itemLatInput.value.trim() : '';
+      const lngVal = itemLngInput ? itemLngInput.value.trim() : '';
+      const latNum = parseFloat(latVal);
+      const lngNum = parseFloat(lngVal);
+      const hasValidNumbers = latVal !== '' && lngVal !== '' && !isNaN(latNum) && !isNaN(lngNum);
+
+      if (hasValidNumbers) {
+        if (btnClearLocation) btnClearLocation.classList.remove('hidden');
+        if (coordPasteInput && document.activeElement !== coordPasteInput) {
+          coordPasteInput.value = `${itemLatInput.value}, ${itemLngInput.value}`;
+          lastAutoParsedText = coordPasteInput.value;
+        }
+      } else if (!latVal && !lngVal) {
+        if (btnClearLocation) btnClearLocation.classList.add('hidden');
+        if (coordPasteInput && document.activeElement !== coordPasteInput) {
+          coordPasteInput.value = '';
+          lastAutoParsedText = '';
+        }
+      }
+    }
+    itemLatInput?.addEventListener('input', handleDirectCoordInput);
+    itemLngInput?.addEventListener('input', handleDirectCoordInput);
+
+    // 좌표 초기화 버튼 (#btn-clear-location)
+    btnClearLocation?.addEventListener('click', () => {
+      if (itemLatInput) itemLatInput.value = '';
+      if (itemLngInput) itemLngInput.value = '';
+      if (coordPasteInput) coordPasteInput.value = '';
+      lastAutoParsedText = '';
       const searchInput = document.getElementById('place-search-input');
-      const statusBadge = document.getElementById('location-status-badge');
-      const badgeText = document.getElementById('location-badge-text');
-      const pickBtn = document.getElementById('btn-pick-on-map');
+      if (searchInput) searchInput.value = '';
 
-      if (latInput) {
-        latInput.value = '';
-        latInput.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-      if (lngInput) {
-        lngInput.value = '';
-        lngInput.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-      if (searchInput) {
-        searchInput.value = '';
-        searchInput.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-
-      statusBadge?.classList.remove('has-location');
-      if (badgeText) {
-        badgeText.textContent = '지도에서 위치를 지정해 주세요';
-      }
-      const pickBtnSpan = pickBtn?.querySelector('span');
-      if (pickBtnSpan) {
-        pickBtnSpan.textContent = '지도 핀 지정';
-      }
-      clearLocationBtn.classList.add('hidden');
+      btnClearLocation.classList.add('hidden');
       activePickerCoord = null;
       mapManager.setPinDropMode(false);
-      showToast('위치 지정이 해제되었습니다.');
+      showToast('좌표가 초기화되었습니다.');
     });
 
     // 지도 핀 드롭 버튼 클릭 (지도 핀 위치 선택 모드 진입)
-    const pickOnMapBtn = document.getElementById('btn-pick-on-map');
     pickOnMapBtn?.addEventListener('click', () => {
       dom.modalOverlay.classList.add('picker-mode-active');
       previousSheetStateBeforePicker = currentSheetState;
@@ -2058,22 +2133,28 @@
         // 일반 지도 핀 드롭 모드
         const latInput = document.getElementById('item-lat');
         const lngInput = document.getElementById('item-lng');
+        const coordPasteInput = document.getElementById('coord-paste-input');
+        const clearBtn = document.getElementById('btn-clear-location');
+
         if (latInput && lngInput) {
-          latInput.value = lat.toFixed(5);
-          lngInput.value = lng.toFixed(5);
+          latInput.value = lat;
+          lngInput.value = lng;
           latInput.dispatchEvent(new Event('input', { bubbles: true }));
           lngInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+          if (coordPasteInput) {
+            coordPasteInput.value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+          }
+          if (clearBtn) clearBtn.classList.remove('hidden');
 
           const statusBadge = document.getElementById('location-status-badge');
           const badgeText = document.getElementById('location-badge-text');
           const pickBtn = document.getElementById('btn-pick-on-map');
-          const clearBtn = document.getElementById('btn-clear-location');
 
           if (statusBadge) statusBadge.classList.add('has-location');
           if (badgeText) badgeText.textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
           const pickBtnSpan = pickBtn?.querySelector('span');
           if (pickBtnSpan) pickBtnSpan.textContent = '위치 변경';
-          if (clearBtn) clearBtn.classList.remove('hidden');
         }
         showToast(`핀 좌표 선택 완료: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
 
@@ -2112,16 +2193,24 @@
       const { lat, lng, name, address } = activePickerCoord;
       const latInput = document.getElementById('item-lat');
       const lngInput = document.getElementById('item-lng');
+      const coordPasteInput = document.getElementById('coord-paste-input');
       const searchInput = document.getElementById('place-search-input');
       const titleInput = document.getElementById('item-title');
+      const clearBtn = document.getElementById('btn-clear-location');
 
       if (latInput) {
-        latInput.value = lat.toFixed(5);
+        latInput.value = lat;
         latInput.dispatchEvent(new Event('input', { bubbles: true }));
       }
       if (lngInput) {
-        lngInput.value = lng.toFixed(5);
+        lngInput.value = lng;
         lngInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (coordPasteInput) {
+        coordPasteInput.value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      }
+      if (clearBtn) {
+        clearBtn.classList.remove('hidden');
       }
 
       const placeLabel = name || address || '';
@@ -2138,7 +2227,6 @@
       const statusBadge = document.getElementById('location-status-badge');
       const badgeText = document.getElementById('location-badge-text');
       const pickBtn = document.getElementById('btn-pick-on-map');
-      const clearBtn = document.getElementById('btn-clear-location');
 
       if (statusBadge) {
         statusBadge.classList.add('has-location');
@@ -2149,9 +2237,6 @@
       const pickBtnSpan = pickBtn?.querySelector('span');
       if (pickBtnSpan) {
         pickBtnSpan.textContent = '위치 변경';
-      }
-      if (clearBtn) {
-        clearBtn.classList.remove('hidden');
       }
 
       // 카테고리별 명칭 필드가 비어있다면 자동 입력:

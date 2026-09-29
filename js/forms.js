@@ -122,27 +122,51 @@
             ${this.renderCategorySpecificFields(cat, data)}
           </div>
 
-          <!-- 위치 지정 (지도 표시) 섹션 -->
+          <!-- 위치 지정 (지도 표시 및 구글맵 좌표 입력) -->
           <div class="form-group location-section">
-            <label class="form-label">위치 지정 (지도 표시)</label>
-            <div class="location-picker-box">
-              <div class="location-status-badge ${hasCoord ? 'has-location' : ''}" id="location-status-badge">
-                <div class="location-badge-icon">
-                  ${typeof Icons !== 'undefined' ? Icons.getIcon('LOCATION_TARGET', { size: 16 }) : ''}
-                </div>
-                <span class="location-badge-text" id="location-badge-text">
-                  ${hasCoord ? escapeHtml(data.address || `${Number(data.lat).toFixed(4)}, ${Number(data.lng).toFixed(4)}`) : '지도에서 위치를 지정해 주세요'}
-                </span>
-              </div>
-              <button type="button" id="btn-pick-on-map" class="btn btn-primary btn-pick-on-map" title="지도에서 위치 선택">
-                <span>${hasCoord ? '위치 변경' : '지도 핀 지정'}</span>
-              </button>
-              <button type="button" id="btn-clear-location" class="btn btn-outline btn-clear-location ${hasCoord ? '' : 'hidden'}" title="위치 초기화">
-                <span>초기화</span>
-              </button>
+            <div class="location-section-header">
+              <label class="form-label" style="margin-bottom:0;">위치 및 지도 좌표 (구글맵 연동)</label>
+              <span class="location-section-tip">구글맵에서 복사한 좌표를 붙여넣거나 직접 입력할 수 있습니다.</span>
             </div>
-            <input type="hidden" id="item-lat" name="lat" value="${data.lat !== undefined && data.lat !== '' && data.lat !== null ? data.lat : ''}" />
-            <input type="hidden" id="item-lng" name="lng" value="${data.lng !== undefined && data.lng !== '' && data.lng !== null ? data.lng : ''}" />
+
+            <!-- 1. 구글맵 좌표 한 줄 붙여넣기 입력창 -->
+            <div class="coord-paste-wrap">
+              <div class="coord-paste-input-box">
+                <span class="coord-paste-icon">
+                  ${typeof Icons !== 'undefined' ? Icons.getIcon('LOCATION_TARGET', { size: 16 }) : ''}
+                </span>
+                <input type="text" id="coord-paste-input" class="form-control coord-paste-input" 
+                       placeholder="구글맵 좌표 붙여넣기 (예: 35.6585, 139.7454)" 
+                       value="${hasCoord ? `${Number(data.lat).toFixed(6)}, ${Number(data.lng).toFixed(6)}` : ''}" />
+                <button type="button" id="btn-apply-coord-paste" class="btn btn-secondary btn-sm" title="좌표 즉시 적용">
+                  <span>적용</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 2. 위도 및 경도 개별 입력창 + 지도 핀 찍기/초기화 버튼 -->
+            <div class="coord-inputs-grid">
+              <div class="coord-input-item">
+                <label class="coord-sublabel" for="item-lat">위도 (Latitude)</label>
+                <input type="number" step="any" id="item-lat" name="lat" class="form-control" 
+                       placeholder="예: 35.65858" value="${escapeHtml(data.lat !== undefined && data.lat !== '' && data.lat !== null ? String(data.lat) : '')}" />
+              </div>
+              <div class="coord-input-item">
+                <label class="coord-sublabel" for="item-lng">경도 (Longitude)</label>
+                <input type="number" step="any" id="item-lng" name="lng" class="form-control" 
+                       placeholder="예: 139.74543" value="${escapeHtml(data.lng !== undefined && data.lng !== '' && data.lng !== null ? String(data.lng) : '')}" />
+              </div>
+              <div class="coord-actions-box">
+                <button type="button" id="btn-pick-on-map" class="btn btn-outline btn-pick-on-map" title="지도에서 클릭하여 핀 지정">
+                  ${typeof Icons !== 'undefined' ? Icons.getIcon('MAP', { size: 14 }) : ''}
+                  <span>지도 핀 찍기</span>
+                </button>
+                <button type="button" id="btn-clear-location" class="btn btn-outline btn-clear-location ${hasCoord ? '' : 'hidden'}" title="좌표 초기화">
+                  <span>초기화</span>
+                </button>
+              </div>
+            </div>
+
             <input type="hidden" id="place-search-input" value="${escapeHtml(data.address || data.title || '')}" />
           </div>
 
@@ -573,12 +597,34 @@
     }
   }
 
+  /**
+   * @intent 구글맵 좌표 문자열(위도, 경도) 파싱 유틸리티 - 다양한 구분자(쉼표, 공백, 슬래시, 괄호) 및 유효 범위(-90~90, -180~180) 검증
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   * @param {string} str - 구글맵 복사 좌표 문자열
+   * @returns {{lat: number, lng: number}|null} 파싱된 좌표 객체 또는 null
+   */
+  function parseCoordinates(str) {
+    if (!str) return null;
+    // '35.6585805, 139.7454329' 또는 '35.6585 139.7454' 또는 '(35.6585, 139.7454)' 등 다양한 형식 지원
+    const clean = str.replace(/[()]/g, '').trim();
+    const match = clean.match(/^(-?\d+(?:\.\d+)?)[,\s/]+(-?\d+(?:\.\d+)?)$/);
+    if (!match) return null;
+    const lat = parseFloat(match[1]);
+    const lng = parseFloat(match[2]);
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+    return { lat, lng };
+  }
+
   const formManager = new FormManager();
 
   return {
     CATEGORIES,
     FormManager,
     formManager,
+    parseCoordinates,
     escapeHtml
   };
 });

@@ -750,6 +750,68 @@
   gap: 12px;
 }
 
+/* 위치 및 지도 좌표 (구글맵 연동 및 직접 입력) */
+.location-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.location-section-tip {
+  font-size: 0.76rem;
+  color: var(--gray-500);
+}
+
+.coord-paste-wrap {
+  margin-bottom: 10px;
+}
+
+.coord-paste-input-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+.coord-paste-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--primary-600);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+}
+
+.coord-paste-input {
+  padding-left: 36px !important;
+  font-family: monospace;
+  font-size: 0.88rem;
+}
+
+.coord-inputs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.coord-sublabel {
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--gray-600);
+  margin-bottom: 4px;
+}
+
+.coord-actions-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .location-picker-box {
   display: flex;
   align-items: center;
@@ -1102,6 +1164,19 @@
     right: 14px;
     width: 38px;
     height: 38px;
+  }
+  .coord-inputs-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .coord-actions-box {
+    grid-column: span 2;
+    display: flex;
+    width: 100%;
+    margin-top: 4px;
+  }
+  .coord-actions-box .btn {
+    flex: 1;
+    justify-content: center;
   }
 }
 
@@ -1496,6 +1571,23 @@
   .category-pill {
     padding: 5px 10px;
     font-size: 0.75rem;
+  }
+
+  /* 모바일 구글맵 좌표 및 위치 지정 필드 최적화 */
+  .coord-inputs-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .coord-actions-box {
+    grid-column: span 2;
+    display: flex;
+    width: 100%;
+    margin-top: 4px;
+  }
+
+  .coord-actions-box .btn {
+    flex: 1;
+    justify-content: center;
   }
 
   /* 모바일 위치 피커 박스 최적화 */

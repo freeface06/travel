@@ -709,6 +709,8 @@ runTest('7-5. 여행 계획 삭제 (deleteTrip) 및 최소 1개 유지 방어 �
       path.join(__dirname, '../js/supabase.js'),
       path.join(__dirname, '../js/store.js'),
       path.join(__dirname, '../js/forms.js'),
+      path.join(__dirname, '../js/app.js'),
+      path.join(__dirname, '../js/icons.js'),
       path.join(__dirname, '../index.html'),
       path.join(__dirname, '../css/components.css')
     ];
