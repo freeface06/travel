@@ -33,11 +33,21 @@
     tabExpense: document.getElementById('tab-expense'),
     tabShare: document.getElementById('tab-share'),
     daySelectorBar: document.getElementById('day-selector-bar'),
+    dayChipSliderWrapper: document.getElementById('day-chip-slider-wrapper'),
 
     // 컨텐츠 패널
     panelContentArea: document.getElementById('panel-content-area'),
     sidePanel: document.getElementById('side-panel'),
     bottomSheetHandle: document.getElementById('bottom-sheet-handle'),
+    btnSheetClose: document.getElementById('btn-sheet-close'),
+
+    // 모바일 전용 하단 내비게이션 요소
+    mobileBottomNav: document.getElementById('mobile-bottom-nav'),
+    mNavMap: document.getElementById('m-nav-map'),
+    mNavTimeline: document.getElementById('m-nav-timeline'),
+    mNavAdd: document.getElementById('m-nav-add'),
+    mNavExpense: document.getElementById('m-nav-expense'),
+    mNavShare: document.getElementById('m-nav-share'),
 
     // 지도 컨트롤
     btnPinDropToggle: document.getElementById('btn-pin-drop-toggle'),
@@ -58,8 +68,20 @@
     toastContainer: document.getElementById('toast-container')
   };
 
-  // 모바일 바텀시트 상태: 'peek' (80px), 'half' (50vh), 'full' (90vh)
+  // 모바일 바텀시트 상태: 'hidden', 'peek' (60px), 'half' (52vh), 'full' (전체)
   let currentSheetState = 'half';
+
+  /**
+   * 모바일 하단 네비게이션 활성 탭 UI 동기화
+   * @param {string} targetName 
+   */
+  function syncMobileNavActiveState(targetName) {
+    if (!dom.mobileBottomNav) return;
+    const items = dom.mobileBottomNav.querySelectorAll('.m-nav-item:not(.m-nav-fab)');
+    items.forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.target === targetName);
+    });
+  }
 
   /**
    * 토스트 메시지 표시
@@ -79,21 +101,30 @@
 
   /**
    * 모바일 바텀시트 상태 설정
+   * @param {'hidden'|'peek'|'half'|'full'} state 
    */
   function setBottomSheetState(state) {
     currentSheetState = state;
-    dom.sidePanel.classList.remove('sheet-peek', 'sheet-half', 'sheet-full');
+    dom.sidePanel.classList.remove('sheet-hidden', 'sheet-peek', 'sheet-half', 'sheet-full');
     dom.sidePanel.classList.add(`sheet-${state}`);
+
+    if (state === 'hidden') {
+      syncMobileNavActiveState('map');
+    } else {
+      syncMobileNavActiveState(store.getState().activeTab);
+    }
+
     setTimeout(() => mapManager.invalidateSize(), 360);
   }
 
   /**
-   * 모바일 바텀시트 단계 순환 토글 (peek -> half -> full -> peek)
+   * 모바일 바텀시트 단계 순환 토글 (hidden -> half -> full -> hidden)
    */
   function cycleBottomSheetState() {
-    if (currentSheetState === 'peek') setBottomSheetState('half');
+    if (currentSheetState === 'hidden') setBottomSheetState('half');
+    else if (currentSheetState === 'peek') setBottomSheetState('half');
     else if (currentSheetState === 'half') setBottomSheetState('full');
-    else setBottomSheetState('peek');
+    else setBottomSheetState('hidden');
   }
 
   /**
@@ -151,10 +182,10 @@
         return;
       }
 
-      // 빠른 아래로 스와이프 (아래로 50px 이상 이동)
+      // 빠른 아래로 스와이프 (아래로 60px 이상 이동)
       if (dragDistance < -60) {
         if (currentSheetState === 'full') setBottomSheetState('half');
-        else setBottomSheetState('peek');
+        else setBottomSheetState('hidden');
         return;
       }
 
@@ -164,8 +195,8 @@
 
       if (ratio > 0.65) {
         setBottomSheetState('full');
-      } else if (ratio < 0.25) {
-        setBottomSheetState('peek');
+      } else if (ratio < 0.22) {
+        setBottomSheetState('hidden');
       } else {
         setBottomSheetState('half');
       }
@@ -923,11 +954,62 @@
     dom.btnAddItemFloating?.addEventListener('click', () => openItemModal());
 
     // 7. 내비게이션 탭 이벤트
-    dom.tabTimeline.addEventListener('click', () => store.setActiveTab('timeline'));
-    dom.tabExpense.addEventListener('click', () => store.setActiveTab('expense'));
-    dom.tabShare.addEventListener('click', () => store.setActiveTab('share'));
+    dom.tabTimeline.addEventListener('click', () => {
+      store.setActiveTab('timeline');
+      if (currentSheetState === 'hidden') setBottomSheetState('half');
+    });
+    dom.tabExpense.addEventListener('click', () => {
+      store.setActiveTab('expense');
+      if (currentSheetState === 'hidden') setBottomSheetState('half');
+    });
+    dom.tabShare.addEventListener('click', () => {
+      store.setActiveTab('share');
+      if (currentSheetState === 'hidden') setBottomSheetState('half');
+    });
 
-    // 8. 모달 및 라이트박스 닫기 이벤트
+    // 8. 모바일 바텀시트 닫기 버튼 이벤트
+    dom.btnSheetClose?.addEventListener('click', () => {
+      setBottomSheetState('hidden');
+    });
+
+    // 9. 모바일 하단 내비게이션 바 버튼 리스너
+    dom.mNavMap?.addEventListener('click', () => {
+      setBottomSheetState('hidden');
+      showToast('지도 전체화면 모드');
+    });
+
+    dom.mNavTimeline?.addEventListener('click', () => {
+      store.setActiveTab('timeline');
+      if (currentSheetState === 'hidden' || currentSheetState === 'peek') {
+        setBottomSheetState('half');
+      } else {
+        syncMobileNavActiveState('timeline');
+      }
+    });
+
+    dom.mNavAdd?.addEventListener('click', () => {
+      openItemModal();
+    });
+
+    dom.mNavExpense?.addEventListener('click', () => {
+      store.setActiveTab('expense');
+      if (currentSheetState === 'hidden' || currentSheetState === 'peek') {
+        setBottomSheetState('half');
+      } else {
+        syncMobileNavActiveState('expense');
+      }
+    });
+
+    dom.mNavShare?.addEventListener('click', () => {
+      store.setActiveTab('share');
+      if (currentSheetState === 'hidden' || currentSheetState === 'peek') {
+        setBottomSheetState('half');
+      } else {
+        syncMobileNavActiveState('share');
+      }
+    });
+
+    // 10. 모달 및 라이트박스 닫기 이벤트
     dom.modalCloseBtn?.addEventListener('click', closeModal);
     dom.modalOverlay?.addEventListener('click', (e) => {
       if (e.target === dom.modalOverlay) closeModal();
@@ -945,10 +1027,10 @@
       }
     });
 
-    // 9. 모바일 바텀시트 터치 스와이프 제스처 엔진 가동
+    // 11. 모바일 바텀시트 터치 스와이프 제스처 엔진 가동
     initBottomSheetTouchGesture();
 
-    // 10. 반응형 뷰포트 변경 및 기기 회전(Orientation) 시 지도 렌더링 무결성 보장
+    // 12. 반응형 뷰포트 변경 및 기기 회전(Orientation) 시 지도 렌더링 무결성 보장
     let resizeDebounceTimer = null;
     window.addEventListener('resize', () => {
       clearTimeout(resizeDebounceTimer);
@@ -961,8 +1043,7 @@
       setTimeout(() => mapManager.invalidateSize(), 300);
     });
 
-
-    // 10. 상단 헤더 액션 버튼
+    // 13. 상단 헤더 액션 버튼
     dom.btnEditTrip?.addEventListener('click', openTripMetaModal);
 
     dom.btnExportJson?.addEventListener('click', () => {
@@ -989,7 +1070,7 @@
       }
     });
 
-    // 11. 중앙 상태(Store) 변경 감지 구독
+    // 14. 중앙 상태(Store) 변경 감지 구독
     store.subscribe((state) => {
       const { trip, selectedDay, selectedItemId, activeTab } = state;
 
@@ -1004,15 +1085,20 @@
 
       // Day 선택 탭 표시/숨김
       if (activeTab === 'timeline') {
-        dom.daySelectorBar.classList.remove('hidden');
+        if (dom.dayChipSliderWrapper) dom.dayChipSliderWrapper.classList.remove('hidden');
         renderDayTabs(trip, selectedDay);
         renderTimelinePanel(trip, selectedDay, selectedItemId);
       } else if (activeTab === 'expense') {
-        dom.daySelectorBar.classList.add('hidden');
+        if (dom.dayChipSliderWrapper) dom.dayChipSliderWrapper.classList.add('hidden');
         renderExpensePanel(trip);
       } else if (activeTab === 'share') {
-        dom.daySelectorBar.classList.add('hidden');
+        if (dom.dayChipSliderWrapper) dom.dayChipSliderWrapper.classList.add('hidden');
         renderSharePanel(trip);
+      }
+
+      // 모바일 하단 내비게이션 탭 동기화
+      if (currentSheetState !== 'hidden') {
+        syncMobileNavActiveState(activeTab);
       }
 
       // 지도 마커 및 동선 재렌더링
