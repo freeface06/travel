@@ -1,5 +1,5 @@
 /**
- * @intent 메인 애플리케이션 진입점 및 전역 이벤트 오케스트레이터 (지도 핀 피커 UX 연동)
+ * @intent 메인 애플리케이션 진입점 및 전역 이벤트 오케스트레이터 (공동 결제 및 KRW 단일 통화 대시보드)
  * @agent  Gemini/manager-develop
  * @branch feat/mytriplog-core
  * @author @developer_name
@@ -460,8 +460,7 @@
             <div class="card-cost-info">
               ${Number(item.cost) > 0 ? `
                 ${getIcon('MONEY', { size: 14, color: 'var(--accent-emerald)' })}
-                <span>${formatAmount(item.cost, item.currency)}</span>
-                ${item.payer ? `<span class="card-payer-badge">${escapeHtml(item.payer)}</span>` : ''}
+                <span>${formatAmount(item.cost, 'KRW')}</span>
               ` : '<span style="color:var(--text-muted); font-weight:normal; font-size:0.75rem;">비용 없음</span>'}
             </div>
             <div class="card-actions">
@@ -589,15 +588,15 @@
   }
 
   /**
-   * 정산(Expense) 대시보드 패널 렌더링
+   * 정산(Expense) 대시보드 패널 렌더링 (부부 공동 경비 및 KRW 원화 단일화)
    */
   function renderExpensePanel(trip) {
     const meta = trip.metadata || {};
     const participants = meta.participants || [];
-    const baseCurr = meta.baseCurrency || 'KRW';
+    const baseCurr = 'KRW';
     const rates = meta.customRates || {};
 
-    const { settlements, summary, balances } = calculateSettlements(participants, trip.items, baseCurr, rates);
+    const { summary } = calculateSettlements(participants, trip.items, baseCurr, rates);
 
     const perPerson = Math.round(summary.totalInBase / 2);
 
@@ -618,15 +617,20 @@
 
     let html = `
       <div class="expense-dashboard">
+        <div style="margin-bottom:12px;">
+          <h3 style="font-size:1rem; font-weight:700; color:var(--text-main); margin-bottom:2px;">부부 공동 경비 대시보드</h3>
+          <span style="font-size:0.78rem; color:var(--text-muted);">통화: KRW (원) | 모든 지출은 부부 공동 경비로 통합 집계됩니다.</span>
+        </div>
+
         <!-- 상단 요약 통계 -->
         <div class="summary-stat-grid">
           <div class="stat-card">
-            <span class="stat-label">총 신혼여행 경비 (${baseCurr})</span>
-            <span class="stat-value">${formatAmount(summary.totalInBase, baseCurr)}</span>
+            <span class="stat-label">총 여행 경비 (KRW 원)</span>
+            <span class="stat-value">${formatAmount(summary.totalInBase, 'KRW')}</span>
           </div>
           <div class="stat-card">
             <span class="stat-label">1인당 평균 경비 (2인 기준)</span>
-            <span class="stat-value" style="color:var(--primary-600);">${formatAmount(perPerson, baseCurr)}</span>
+            <span class="stat-value" style="color:var(--primary-600);">${formatAmount(perPerson, 'KRW')}</span>
           </div>
         </div>
 
@@ -655,7 +659,7 @@
                 ${getIcon(cInfo.icon, { size: 14, color: 'var(--gray-600)' })}
                 ${cInfo.label} <strong style="font-size:0.75rem; color:var(--primary-600);">(${percent}%)</strong>
               </span>
-              <span class="expense-cat-amount">${formatAmount(catAmt, baseCurr)}</span>
+              <span class="expense-cat-amount">${formatAmount(catAmt, 'KRW')}</span>
             </div>
             <div class="expense-progress-bar">
               <div class="expense-progress-fill" style="width: ${percent}%;"></div>
@@ -668,66 +672,15 @@
     html += `
         </div>
 
-        <!-- 결제 주체별 지출 요약 -->
-        <div class="member-balance-list">
-          <div style="font-size:0.88rem; font-weight:700; color:var(--text-main); margin-bottom:4px;">
-            결제 주체별 지출 현황
-          </div>
-    `;
-
-    // 공동 지출, 신랑, 신부 순서로 렌더링
-    const allPayers = Array.from(new Set(['공통', '신랑', '신부', ...Object.keys(summary.paidByMember || {})]));
-    allPayers.forEach((p) => {
-      const paid = summary.paidByMember[p] || 0;
-      if (paid <= 0 && p !== '공통' && p !== '신랑' && p !== '신부') return;
-      const label = p === '공통' ? '부부 공동 지출' : p;
-      html += `
-        <div class="member-balance-row">
-          <div>
-            <strong>${escapeHtml(label)}</strong>
-          </div>
-          <div style="font-weight:700; color:var(--text-main); font-size:0.9rem;">
-            ${formatAmount(paid, baseCurr)}
-          </div>
-        </div>
-      `;
-    });
-
-    html += `
-        </div>
-
-        <!-- 상호 송금 정산 내역 (필요 시) -->
+        <!-- 공동 결제 현황 (통합 안내) -->
         <div class="settlement-route-box">
           <div class="settlement-route-title">
             ${getIcon('CHECK', { size: 16, color: 'var(--primary-600)' })}
-            <span>상호 정산 상태</span>
+            <span>공동 결제 현황</span>
           </div>
-    `;
-
-    if (settlements.length === 0) {
-      html += `
-        <div style="font-size:0.85rem; color:var(--text-muted); padding:6px 0;">
-          [V] 부부 공동 경비로 모든 정산이 완료되었습니다.
-        </div>
-      `;
-    } else {
-      settlements.forEach((st) => {
-        html += `
-          <div class="settlement-item">
-            <div class="settlement-transfer-text">
-              <strong style="color:var(--text-main);">${escapeHtml(st.from)}</strong>
-              ${getIcon('ARROW_RIGHT', { size: 16, color: 'var(--gray-500)' })}
-              <strong style="color:var(--primary-600);">${escapeHtml(st.to)}</strong>
-            </div>
-            <div style="font-size:0.95rem; font-weight:700; color:var(--text-main);">
-              ${formatAmount(st.amount, st.currency)} 송금
-            </div>
+          <div style="font-size:0.875rem; color:var(--text-main); line-height:1.5; padding:6px 0;">
+            모든 지출은 공동 결제(부부 공동 경비)로 처리되어 별도의 개인간 송금 정산이 필요 없습니다.
           </div>
-        `;
-      });
-    }
-
-    html += `
         </div>
       </div>
     `;
@@ -1007,15 +960,7 @@
             <input type="date" id="meta-end-date" name="endDate" class="form-control" value="${escapeHtml(meta.endDate || '')}" />
           </div>
         </div>
-        <div class="form-group">
-          <label class="form-label" for="meta-base-currency">정산 기준 통화</label>
-          <select id="meta-base-currency" name="baseCurrency" class="form-control">
-            <option value="KRW"${(meta.baseCurrency || 'KRW') === 'KRW' ? ' selected' : ''}>KRW (대한민국 원)</option>
-            <option value="JPY"${(meta.baseCurrency || '') === 'JPY' ? ' selected' : ''}>JPY (일본 엔)</option>
-            <option value="USD"${(meta.baseCurrency || '') === 'USD' ? ' selected' : ''}>USD (미국 달러)</option>
-            <option value="EUR"${(meta.baseCurrency || '') === 'EUR' ? ' selected' : ''}>EUR (유럽 유로)</option>
-          </select>
-        </div>
+        <input type="hidden" id="meta-base-currency" name="baseCurrency" value="KRW" />
         <div class="form-group">
           <label class="form-label" for="meta-gmaps-key">Google Maps API 키</label>
           <input type="text" id="meta-gmaps-key" name="gmapsKey" class="form-control" 
@@ -1410,15 +1355,7 @@
             1/N 정산에 참여할 멤버들의 이름을 쉼표로 구분하여 입력해 주세요.
           </span>
         </div>
-        <div class="form-group">
-          <label class="form-label" for="create-trip-currency">정산 기준 통화</label>
-          <select id="create-trip-currency" name="baseCurrency" class="form-control">
-            <option value="KRW" selected>KRW (대한민국 원)</option>
-            <option value="JPY">JPY (일본 엔)</option>
-            <option value="USD">USD (미국 달러)</option>
-            <option value="EUR">EUR (유럽 유로)</option>
-          </select>
-        </div>
+        <input type="hidden" id="create-trip-currency" name="baseCurrency" value="KRW" />
         <div class="modal-form-actions">
           <button type="button" id="btn-create-trip-cancel" class="btn btn-secondary">취소</button>
           <button type="submit" class="btn btn-primary">

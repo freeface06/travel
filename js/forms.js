@@ -1,5 +1,5 @@
 /**
- * @intent 6대 카테고리(비행기, 공항, 숙소, 명소, 식당, 교통) 동적 폼 및 입력 검증 모듈
+ * @intent 6대 카테고리 동적 폼 및 입력 검증 모듈 (공동 결제 및 KRW 원화 단일 통화 최적화)
  * @agent  Gemini/manager-develop
  * @branch feat/mytriplog-core
  * @author @developer_name
@@ -65,19 +65,6 @@
       this.uploadedPhotoId = data.photoId || null;
       this.uploadedPhotoDataUrl = data.photoDataUrl || null;
 
-      // 신혼여행 특화 기본 결제자 목록 (공동 지출, 신랑, 신부)
-      const baseMembers = (participants && participants.length > 0)
-        ? participants.filter((p) => p !== '공통' && p !== '공동')
-        : ['신랑', '신부'];
-      
-      const allPayers = ['공통', ...baseMembers];
-      const currentPayer = data.payer || '공통';
-
-      const payerOptions = allPayers.map((p) => {
-        const label = p === '공통' ? '공동 지출' : p;
-        const selected = (currentPayer === p) ? ' selected' : '';
-        return `<option value="${escapeHtml(p)}"${selected}>${escapeHtml(label)}</option>`;
-      }).join('');
 
       const hasCoord = (data.lat !== undefined && data.lat !== null && data.lat !== '' && !isNaN(Number(data.lat))) &&
                        (data.lng !== undefined && data.lng !== null && data.lng !== '' && !isNaN(Number(data.lng)));
@@ -147,29 +134,16 @@
             <input type="hidden" id="place-search-input" value="${escapeHtml(data.address || data.title || '')}" />
           </div>
 
-          <!-- 비용 및 결제자 정보 -->
-          <div class="form-row expense-row">
-            <div class="form-group flex-2">
-              <label class="form-label" for="item-cost">비용 / 지출액</label>
-              <input type="number" id="item-cost" name="cost" class="form-control" min="0" step="any" 
-                     placeholder="0" value="${escapeHtml(data.cost || '')}" />
+          <!-- 비용 (공동 결제, KRW 원화 고정) -->
+          <div class="form-group expense-section">
+            <label class="form-label" for="item-cost">비용 / 지출액</label>
+            <div class="input-with-unit">
+              <input type="number" id="item-cost" name="cost" class="form-control" min="0" step="1" 
+                     placeholder="0 (금액만 숫자로 입력)" value="${escapeHtml(data.cost !== undefined && data.cost !== null ? data.cost : '')}" />
+              <span class="input-unit-badge">원</span>
             </div>
-            <div class="form-group flex-1">
-              <label class="form-label" for="item-currency">통화</label>
-              <select id="item-currency" name="currency" class="form-control">
-                <option value="KRW"${(data.currency || 'KRW') === 'KRW' ? ' selected' : ''}>KRW (원)</option>
-                <option value="JPY"${(data.currency || '') === 'JPY' ? ' selected' : ''}>JPY (엔)</option>
-                <option value="USD"${(data.currency || '') === 'USD' ? ' selected' : ''}>USD ($)</option>
-                <option value="EUR"${(data.currency || '') === 'EUR' ? ' selected' : ''}>EUR (€)</option>
-                <option value="CNY"${(data.currency || '') === 'CNY' ? ' selected' : ''}>CNY (위안)</option>
-              </select>
-            </div>
-            <div class="form-group flex-1">
-              <label class="form-label" for="item-payer">결제자</label>
-              <select id="item-payer" name="payer" class="form-control">
-                ${payerOptions}
-              </select>
-            </div>
+            <input type="hidden" id="item-currency" name="currency" value="KRW" />
+            <input type="hidden" id="item-payer" name="payer" value="공동" />
           </div>
 
           <!-- 사진 첨부 (E-티켓, 영수증, 명소 사진) -->
