@@ -214,19 +214,14 @@ runTest('3-6. 다중 통화 혼합 결제 정산 검증 (KRW + JPY)', () => {
 // --------------------------------------------------------------------------
 console.log('\n--- [Suite 4: Store 상태 관리자 및 불변성/옵저버 검증] ---');
 
-runTest('4-1. 기본 여행 데이터 초기화 및 6대 카테고리 완전성 검증', () => {
+runTest('4-1. 기본 여행 데이터 초기화 및 클린 슬레이트(items: []) 검증', () => {
   const store = new TripStore.Store();
   const trip = store.getState().trip;
 
   assert.ok(trip.metadata.title);
+  assert.strictEqual(trip.metadata.title, '나의 여행 계획');
   assert.ok(Array.isArray(trip.items));
-  assert.ok(trip.items.length >= 6);
-
-  // 6대 카테고리가 모두 기본 일정에 존재하는지 검사
-  const categories = new Set(trip.items.map((it) => it.category));
-  ['FLIGHT', 'AIRPORT', 'HOTEL', 'ATTRACTION', 'DINING', 'TRANSIT'].forEach((cat) => {
-    assert.ok(categories.has(cat), `Category ${cat} must exist in default trip`);
-  });
+  assert.strictEqual(trip.items.length, 0);
 });
 
 runTest('4-2. 아이템 추가 (addItem) 및 ID 자동 발급', () => {
@@ -249,7 +244,14 @@ runTest('4-2. 아이템 추가 (addItem) 및 ID 자동 발급', () => {
 
 runTest('4-3. 아이템 수정 (updateItem)', () => {
   const store = new TripStore.Store();
-  const firstId = store.getState().trip.items[0].id;
+  const added = store.addItem({
+    title: '인천 -> 나리타 에어서울 RS701',
+    category: 'FLIGHT',
+    day: 1,
+    cost: 650000,
+    currency: 'KRW'
+  });
+  const firstId = added.id;
 
   store.updateItem(firstId, {
     title: '인천 -> 나리타 에어서울 RS701 (수정됨)',
@@ -261,15 +263,22 @@ runTest('4-3. 아이템 수정 (updateItem)', () => {
   assert.strictEqual(updated.cost, 700000);
 });
 
-runTest('4-4. 아이템 삭제 (deleteItem)', () => {
+runTest('4-4. 아이템 삭제 (deleteItem) 및 일정 전체 비우기 (clearCurrentTripItems)', () => {
   const store = new TripStore.Store();
-  const firstId = store.getState().trip.items[0].id;
+  const firstItem = store.getState().trip.items[0] || store.addItem({ title: '삭제 대상 일정' });
+  const firstId = firstItem.id;
   const initialCount = store.getState().trip.items.length;
 
   const deleted = store.deleteItem(firstId);
   assert.strictEqual(deleted, true);
   assert.strictEqual(store.getState().trip.items.length, initialCount - 1);
   assert.strictEqual(store.getState().trip.items.find((it) => it.id === firstId), undefined);
+
+  // 일정 전체 비우기 (clearCurrentTripItems) 검증
+  store.addItem({ title: '테스트 아이템 A' });
+  assert.ok(store.getState().trip.items.length > 0);
+  store.clearCurrentTripItems();
+  assert.strictEqual(store.getState().trip.items.length, 0);
 });
 
 runTest('4-5. 옵저버 구독 및 상태 변경 시 통지 (subscribe/notify)', () => {

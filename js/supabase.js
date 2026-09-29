@@ -22,6 +22,12 @@
   const DEFAULT_SUPABASE_URL = 'https://qmqklwelrsmlsrmtnsxt.supabase.co';
   const DEFAULT_SUPABASE_KEY = 'sb_publishable_Gz-4w0mexqsHUTaNl6AtDw_b9W1nddm';
 
+  // 과거 레거시 더미 데이터 식별자 세트
+  const DUMMY_ITEM_IDS = new Set([
+    'item-001', 'item-002', 'item-003', 'item-004',
+    'item-005', 'item-006', 'item-007', 'item-008'
+  ]);
+
   /**
    * @intent Base64 DataURL 문자열을 표준 Blob 객체로 변환
    * @agent  Gemini/manager-develop
@@ -272,10 +278,37 @@
       try {
         const cloudTrips = await this.fetchTrips();
         if (Array.isArray(cloudTrips) && cloudTrips.length > 0) {
+          // 클라우드 데이터 중 과거 더미(id: 'trip-honeymoon-2026' 또는 더미 아이템 포함 레거시) 감지 시 정제 및 클라우드 재동기화
+          let cleanedAny = false;
+          for (const trip of cloudTrips) {
+            if (!trip || !trip.metadata) continue;
+            const isDummyTrip = trip.metadata.id === 'trip-honeymoon-2026' ||
+              trip.metadata.title === '우리의 로맨틱 신혼여행' ||
+              trip.metadata.title === '도쿄 3박 4일 감성 힐링 여행';
+            const hasDummyItems = Array.isArray(trip.items) && trip.items.some((it) => it && (DUMMY_ITEM_IDS.has(it.id) || (typeof it.title === 'string' && (it.title.includes('에어서울 RS701') || it.title.includes('나리타 국제공항')))));
+
+            if (isDummyTrip || hasDummyItems) {
+              if (isDummyTrip) {
+                trip.metadata.id = 'trip-my-first-trip';
+                trip.metadata.title = '나의 여행 계획';
+                trip.metadata.startDate = '';
+                trip.metadata.endDate = '';
+                trip.items = [];
+              } else if (hasDummyItems) {
+                trip.items = trip.items.filter((it) => it && !DUMMY_ITEM_IDS.has(it.id) && !(typeof it.title === 'string' && (it.title.includes('에어서울 RS701') || it.title.includes('나리타 국제공항'))));
+              }
+              await this.syncTrip(trip);
+              if (isDummyTrip) {
+                await this.deleteTrip('trip-honeymoon-2026').catch(() => {});
+              }
+              cleanedAny = true;
+            }
+          }
+
           if (storeInstance && typeof storeInstance.importFromCloud === 'function') {
             await storeInstance.importFromCloud();
           }
-          this.setSyncState('synced', '클라우드 데이터 자동 복원됨');
+          this.setSyncState('synced', cleanedAny ? '클라우드 더미 정리 및 데이터 복원 완료' : '클라우드 데이터 자동 복원됨');
           return { action: 'imported', count: cloudTrips.length, trips: cloudTrips };
         } else {
           // 클라우드가 비어있고 로컬에 기존 여행 계획이 있다면 클라우드로 즉시 1회 자동 업로드(Seed)

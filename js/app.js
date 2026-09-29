@@ -1380,12 +1380,18 @@
 
       if (activeTab === 'list') {
         html += `
-          <div class="trip-manager-toolbar">
+          <div class="trip-manager-toolbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
             <span class="trip-manager-count">총 ${trips.length}개의 여행 계획이 보관되어 있습니다.</span>
-            <button type="button" id="btn-open-create-trip" class="btn-create-trip">
-              ${getIcon('PLUS', { size: 16 })}
-              <span>새 여행 계획 만들기</span>
-            </button>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <button type="button" id="btn-clear-current-trip" class="btn btn-outline btn-sm" style="color:var(--danger, #ef4444); border-color:var(--danger, #ef4444);" title="현재 활성 여행의 모든 일정을 비웁니다">
+                ${getIcon('DELETE', { size: 14 })}
+                <span>현재 일정 비우기</span>
+              </button>
+              <button type="button" id="btn-open-create-trip" class="btn-create-trip">
+                ${getIcon('PLUS', { size: 16 })}
+                <span>새 여행 계획 만들기</span>
+              </button>
+            </div>
           </div>
           <div class="trip-card-grid">
         `;
@@ -1535,6 +1541,22 @@
           dom.modalContainer.innerHTML = renderContent(nextTab);
           bindEvents(nextTab);
         });
+      });
+
+      // 현재 활성 일정 전체 비우기 버튼 이벤트
+      document.getElementById('btn-clear-current-trip')?.addEventListener('click', () => {
+        const curTrip = store.getCurrentTrip();
+        const curTitle = (curTrip && curTrip.metadata && curTrip.metadata.title) || '현재 여행';
+        const itemCount = (curTrip && Array.isArray(curTrip.items)) ? curTrip.items.length : 0;
+        if (itemCount === 0) {
+          showToast('비울 일정이 없습니다. 이미 빈 상태입니다.');
+          return;
+        }
+        if (confirm(`'${curTitle}'의 모든 일정(${itemCount}개)을 완전히 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.`)) {
+          store.clearCurrentTripItems();
+          showToast('모든 일정이 깨끗하게 초기화되었습니다.');
+          openTripManagerModal('list');
+        }
       });
 
       // 새 여행 계획 생성 버튼 이벤트
@@ -1890,6 +1912,34 @@
    * 앱 초기화 및 이벤트 리스너 바인딩
    */
   function initApp() {
+    // 0. 레거시 더미 데이터 감지 시 클린 슬레이트(Clean Slate) 정제 및 강제 빈 상태 동기화
+    const curTrip = store.getCurrentTrip();
+    if (curTrip) {
+      const isLegacyDummy = curTrip.metadata && (
+        curTrip.metadata.id === 'trip-honeymoon-2026' ||
+        curTrip.metadata.title === '우리의 로맨틱 신혼여행' ||
+        curTrip.metadata.title === '도쿄 3박 4일 감성 힐링 여행'
+      );
+      const hasDummyItems = Array.isArray(curTrip.items) && curTrip.items.some((it) =>
+        it && (
+          (typeof it.id === 'string' && (it.id.startsWith('item-00') || it.id === 'item-001')) ||
+          (typeof it.title === 'string' && (it.title.includes('에어서울 RS701') || it.title.includes('나리타 국제공항')))
+        )
+      );
+
+      if (isLegacyDummy || hasDummyItems) {
+        if (isLegacyDummy) {
+          store.updateMetadata({
+            id: 'trip-my-first-trip',
+            title: '나의 여행 계획',
+            startDate: '',
+            endDate: ''
+          });
+        }
+        store.clearCurrentTripItems();
+      }
+    }
+
     // 1. URL Hash 공유 데이터 체크
     if (window.location.hash) {
       const parsedTrip = parseShareHash(window.location.hash);
