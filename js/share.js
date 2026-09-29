@@ -40,6 +40,13 @@
       sanitized.items = sanitized.items.map((item) => {
         const itemCopy = Object.assign({}, item);
         delete itemCopy.photoDataUrl; // 사진 본문 데이터 제거 (photoId만 보존)
+        if (Array.isArray(itemCopy.photos)) {
+          itemCopy.photos = itemCopy.photos.map((p) => {
+            const pCopy = Object.assign({}, p);
+            delete pCopy.dataUrl; // 다중 사진 개별 Base64 데이터 제거 (경량화)
+            return pCopy;
+          });
+        }
         return itemCopy;
       });
     }

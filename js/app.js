@@ -60,11 +60,18 @@
     // 라이트박스
     lightboxOverlay: document.getElementById('lightbox-overlay'),
     lightboxImg: document.getElementById('lightbox-img'),
-    lightboxCloseBtn: document.getElementById('lightbox-close-btn'),
+    lightboxCloseBtn: document.getElementById('btn-close-lightbox') || document.getElementById('lightbox-close-btn'),
+    btnLightboxPrev: document.getElementById('btn-lightbox-prev'),
+    btnLightboxNext: document.getElementById('btn-lightbox-next'),
+    lightboxCounter: document.getElementById('lightbox-counter'),
 
     // 토스트
     toastContainer: document.getElementById('toast-container')
   };
+
+  // 라이트박스 갤러리 상태
+  let currentLightboxGallery = [];
+  let currentLightboxIndex = 0;
 
   // 모바일 바텀시트 상태: 'hidden', 'peek' (60px), 'half' (52vh), 'full' (전체)
   let currentSheetState = 'half';
@@ -437,6 +444,52 @@
   }
 
   /**
+   * @intent 타임라인 카드 내 사진 마크업 렌더링 (단일 썸네일 및 2열/3열/2x2 그리드 레이아웃)
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   * @param {object} item - 일정 아이템
+   * @returns {string} 사진 HTML 마크업
+   */
+  function renderCardPhotosHtml(item) {
+    const photos = (item.photos && item.photos.length > 0)
+      ? item.photos
+      : (item.photoDataUrl ? [{ id: item.photoId || 'photo-1', dataUrl: item.photoDataUrl }] : []);
+
+    if (photos.length === 0) return '';
+
+    if (photos.length === 1) {
+      return `
+        <img src="${escapeHtml(photos[0].dataUrl)}" class="card-thumbnail" alt="첨부 사진" 
+             data-photo-url="${escapeHtml(photos[0].dataUrl)}" data-gallery-index="0" />
+      `;
+    }
+
+    const count = photos.length;
+    let gridClass = 'cols-4';
+    if (count === 2) gridClass = 'cols-2';
+    else if (count === 3) gridClass = 'cols-3';
+
+    const displayPhotos = photos.slice(0, 4);
+    const remainingCount = count - 4;
+
+    return `
+      <div class="card-photos-grid ${gridClass}">
+        ${displayPhotos.map((p, idx) => {
+          const isLastAndMore = idx === 3 && remainingCount > 0;
+          return `
+            <div class="card-photo-item" data-photo-url="${escapeHtml(p.dataUrl)}" data-gallery-index="${idx}">
+              <img src="${escapeHtml(p.dataUrl)}" alt="사진 ${idx + 1}" />
+              ${isLastAndMore ? `<div class="card-photo-more-badge">+${remainingCount}장</div>` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  /**
    * 타임라인 패널 렌더링
    */
   function renderTimelinePanel(trip, selectedDay, selectedItemId) {
@@ -464,7 +517,6 @@
         </div>
       `;
       dom.panelContentArea.innerHTML = html;
-
       document.getElementById('btn-add-item-day')?.addEventListener('click', () => openItemModal());
       document.getElementById('btn-empty-add-item')?.addEventListener('click', () => openItemModal());
       return;
@@ -494,9 +546,8 @@
           <!-- 카테고리별 핵심 요약 그리드 -->
           ${renderItemCardDetails(item)}
 
-          ${item.photoDataUrl ? `
-            <img src="${escapeHtml(item.photoDataUrl)}" class="card-thumbnail" alt="첨부 사진" data-photo-url="${escapeHtml(item.photoDataUrl)}" />
-          ` : ''}
+          <!-- 사진 영역 (단일 또는 다중 그리드) -->
+          ${renderCardPhotosHtml(item)}
 
           <div class="card-footer-row">
             <div class="card-cost-info">
@@ -527,7 +578,7 @@
     // 카드 클릭 이벤트 (지도 이동 및 하이라이트)
     dom.panelContentArea.querySelectorAll('.timeline-item-card').forEach((card) => {
       card.addEventListener('click', (e) => {
-        if (e.target.closest('.card-actions') || e.target.closest('.card-thumbnail')) return;
+        if (e.target.closest('.card-actions') || e.target.closest('.card-thumbnail') || e.target.closest('.card-photo-item')) return;
         const id = card.dataset.id;
         store.setSelectedItemId(id);
         const item = (trip.items || []).find((it) => it.id === id);
@@ -535,11 +586,34 @@
       });
     });
 
-    // 썸네일 클릭 시 라이트박스 오픈
-    dom.panelContentArea.querySelectorAll('.card-thumbnail').forEach((thumb) => {
-      thumb.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openLightbox(thumb.dataset.photoUrl);
+    // 썸네일 및 그리드 사진 클릭 시 라이트박스 갤러리 오픈
+    dom.panelContentArea.querySelectorAll('.timeline-item-card').forEach((card) => {
+      const id = card.dataset.id;
+      const item = (trip.items || []).find((it) => it.id === id);
+      if (!item) return;
+
+      const photos = (item.photos && item.photos.length > 0)
+        ? item.photos
+        : (item.photoDataUrl ? [{ id: item.photoId || 'photo-1', dataUrl: item.photoDataUrl }] : []);
+      const galleryUrls = photos.map((p) => p.dataUrl);
+
+      // 단일 썸네일
+      const singleThumb = card.querySelector('.card-thumbnail');
+      if (singleThumb) {
+        singleThumb.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openLightbox(singleThumb.dataset.photoUrl, galleryUrls, 0);
+        });
+      }
+
+      // 다중 사진 그리드 아이템들
+      card.querySelectorAll('.card-photo-item').forEach((photoItem) => {
+        photoItem.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const photoIdx = parseInt(photoItem.dataset.galleryIndex, 10) || 0;
+          const url = photoItem.dataset.photoUrl || galleryUrls[photoIdx];
+          openLightbox(url, galleryUrls, photoIdx);
+        });
       });
     });
 
@@ -768,17 +842,80 @@
   }
 
   /**
-   * 라이트박스 팝업 열기
+   * @intent 라이트박스 갤러리 뷰 및 카운터/이전다음 버튼 가시성 동기화
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
    */
-  function openLightbox(imageUrl) {
-    if (!imageUrl) return;
-    dom.lightboxImg.src = imageUrl;
+  function updateLightboxDisplay() {
+    if (!dom.lightboxImg || currentLightboxGallery.length === 0) return;
+    const currentUrl = currentLightboxGallery[currentLightboxIndex];
+    if (currentUrl) {
+      dom.lightboxImg.src = currentUrl;
+    }
+
+    if (currentLightboxGallery.length > 1) {
+      dom.btnLightboxPrev?.classList.remove('hidden');
+      dom.btnLightboxNext?.classList.remove('hidden');
+      if (dom.lightboxCounter) {
+        dom.lightboxCounter.textContent = `${currentLightboxIndex + 1} / ${currentLightboxGallery.length}`;
+        dom.lightboxCounter.classList.remove('hidden');
+      }
+    } else {
+      dom.btnLightboxPrev?.classList.add('hidden');
+      dom.btnLightboxNext?.classList.add('hidden');
+      dom.lightboxCounter?.classList.add('hidden');
+    }
+  }
+
+  /**
+   * @intent 라이트박스 다음 사진 이동 (원형 순환)
+   */
+  function showNextLightboxImage() {
+    if (currentLightboxGallery.length <= 1) return;
+    currentLightboxIndex = (currentLightboxIndex + 1) % currentLightboxGallery.length;
+    updateLightboxDisplay();
+  }
+
+  /**
+   * @intent 라이트박스 이전 사진 이동 (원형 순환)
+   */
+  function showPrevLightboxImage() {
+    if (currentLightboxGallery.length <= 1) return;
+    currentLightboxIndex = (currentLightboxIndex - 1 + currentLightboxGallery.length) % currentLightboxGallery.length;
+    updateLightboxDisplay();
+  }
+
+  /**
+   * @intent 라이트박스 팝업 열기 (단일 사진 및 다중 갤러리/초기 인덱스 지원)
+   * @param {string} imageUrl - 메인 사진 URL
+   * @param {Array<string>} gallery - 전체 사진 URL 배열
+   * @param {number} initialIndex - 초기 열람할 사진 인덱스
+   */
+  function openLightbox(imageUrl, gallery = [], initialIndex = 0) {
+    if (Array.isArray(gallery) && gallery.length > 0) {
+      currentLightboxGallery = [...gallery];
+      currentLightboxIndex = Math.max(0, Math.min(initialIndex, currentLightboxGallery.length - 1));
+    } else if (imageUrl) {
+      currentLightboxGallery = [imageUrl];
+      currentLightboxIndex = 0;
+    } else {
+      return;
+    }
+
+    updateLightboxDisplay();
     dom.lightboxOverlay.classList.add('is-open');
   }
 
+  /**
+   * @intent 라이트박스 팝업 닫기 및 갤러리 상태 리셋
+   */
   function closeLightbox() {
     dom.lightboxOverlay.classList.remove('is-open');
-    dom.lightboxImg.src = '';
+    if (dom.lightboxImg) dom.lightboxImg.src = '';
+    currentLightboxGallery = [];
+    currentLightboxIndex = 0;
   }
 
   /**
@@ -911,42 +1048,72 @@
       showToast('지도를 클릭하여 위치를 지정해 주세요.');
     });
 
-    // 사진 첨부 및 Canvas 리사이징 연동
+    // 사진 첨부 및 다중 사진 등록/삭제 관리
     const photoTriggerBtn = document.getElementById('btn-trigger-photo');
     const photoInput = document.getElementById('item-photo-input');
-    const previewWrapper = document.getElementById('photo-preview-wrapper');
-    const previewImg = document.getElementById('photo-preview-img');
-    const removePhotoBtn = document.getElementById('btn-remove-photo');
+    const photoPreviewSection = document.getElementById('photo-preview-section');
+    const photoPreviewCount = document.getElementById('photo-preview-count');
+    const photosPreviewGrid = document.getElementById('photos-preview-grid');
+    const clearAllPhotosBtn = document.getElementById('btn-clear-all-photos');
+
+    function updateModalPhotoPreview() {
+      if (!photoPreviewSection || !photoPreviewCount || !photosPreviewGrid) return;
+      const count = formManager.uploadedPhotos.length;
+      if (count > 0) {
+        photoPreviewCount.textContent = `첨부된 사진 (${count}장)`;
+        photosPreviewGrid.innerHTML = formManager.renderPhotosPreviewGridHtml();
+        photoPreviewSection.classList.remove('hidden');
+      } else {
+        photoPreviewSection.classList.add('hidden');
+        photosPreviewGrid.innerHTML = '';
+      }
+    }
 
     photoTriggerBtn?.addEventListener('click', () => photoInput.click());
 
     photoInput?.addEventListener('change', async (e) => {
-      const file = e.target.files && e.target.files[0];
-      if (!file) return;
+      const files = Array.from(e.target.files || []);
+      if (files.length === 0) return;
 
       try {
-        showToast('이미지 압축 처리 중...');
-        const { dataUrl } = await resizeImage(file, 1200, 0.75);
-        const photoId = 'photo-' + Date.now();
-        await savePhoto(photoId, dataUrl, file.name);
-
-        formManager.uploadedPhotoId = photoId;
-        formManager.uploadedPhotoDataUrl = dataUrl;
-
-        previewImg.src = dataUrl;
-        previewWrapper.classList.remove('hidden');
-        showToast('사진이 안전하게 등록되었습니다.');
+        showToast(`${files.length}장의 사진 압축 처리 중...`);
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const { dataUrl } = await resizeImage(file, 1200, 0.75);
+          const photoId = 'photo-' + Date.now() + '-' + i;
+          await savePhoto(photoId, dataUrl, file.name);
+          formManager.uploadedPhotos.push({
+            id: photoId,
+            dataUrl,
+            filename: file.name
+          });
+        }
+        updateModalPhotoPreview();
+        photoInput.value = '';
+        showToast(`${files.length}장의 사진이 안전하게 추가되었습니다.`);
       } catch (err) {
         showToast('사진 처리 실패: ' + err.message);
       }
     });
 
-    removePhotoBtn?.addEventListener('click', () => {
-      formManager.uploadedPhotoId = null;
-      formManager.uploadedPhotoDataUrl = null;
-      previewWrapper.classList.add('hidden');
-      previewImg.src = '';
-      photoInput.value = '';
+    // 개별 사진 삭제 (이벤트 위임)
+    photosPreviewGrid?.addEventListener('click', (e) => {
+      const removeBtn = e.target.closest('.btn-remove-single-photo');
+      if (!removeBtn) return;
+      e.stopPropagation();
+      const idx = parseInt(removeBtn.dataset.index, 10);
+      if (!isNaN(idx) && idx >= 0 && idx < formManager.uploadedPhotos.length) {
+        formManager.uploadedPhotos.splice(idx, 1);
+        updateModalPhotoPreview();
+      }
+    });
+
+    // 전체 삭제 리스너
+    clearAllPhotosBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      formManager.uploadedPhotos = [];
+      updateModalPhotoPreview();
+      if (photoInput) photoInput.value = '';
     });
 
     // 취소 버튼
@@ -1764,7 +1931,7 @@
       }
     });
 
-    // 10. 모달 및 라이트박스 닫기 이벤트
+    // 10. 모달 및 라이트박스 닫기/갤러리 내비게이션 이벤트
     dom.modalCloseBtn?.addEventListener('click', closeModal);
     dom.modalOverlay?.addEventListener('click', (e) => {
       if (e.target === dom.modalOverlay) closeModal();
@@ -1773,12 +1940,28 @@
     dom.lightboxOverlay?.addEventListener('click', (e) => {
       if (e.target === dom.lightboxOverlay) closeLightbox();
     });
+    dom.btnLightboxPrev?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showPrevLightboxImage();
+    });
+    dom.btnLightboxNext?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showNextLightboxImage();
+    });
 
-    // Esc 키 이벤트
+    // Esc 및 좌/우 화살표 키 이벤트
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         closeModal();
         closeLightbox();
+      } else if (dom.lightboxOverlay && dom.lightboxOverlay.classList.contains('is-open')) {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          showPrevLightboxImage();
+        } else if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          showNextLightboxImage();
+        }
       }
     });
 

@@ -278,7 +278,13 @@ runTest('5-1. 공유 데이터 살균 시 photoDataUrl(Base64)이 안전하게 �
   const dummyTrip = {
     metadata: { title: '테스트 여행' },
     items: [
-      { id: '1', title: '명소 A', photoId: 'photo-1', photoDataUrl: 'data:image/jpeg;base64,AAAAAA...' },
+      {
+        id: '1',
+        title: '명소 A',
+        photoId: 'photo-1',
+        photoDataUrl: 'data:image/jpeg;base64,AAAAAA...',
+        photos: [{ id: 'p1', dataUrl: 'data:image/jpeg;base64,BBBBBB...', filename: 'attraction.jpg' }]
+      },
       { id: '2', title: '식당 B', photoId: null }
     ]
   };
@@ -287,8 +293,11 @@ runTest('5-1. 공유 데이터 살균 시 photoDataUrl(Base64)이 안전하게 �
   assert.strictEqual(sanitized.items[0].photoDataUrl, undefined);
   assert.strictEqual(sanitized.items[0].photoId, 'photo-1');
   assert.strictEqual(sanitized.items[0].title, '명소 A');
+  assert.strictEqual(sanitized.items[0].photos[0].dataUrl, undefined);
+  assert.strictEqual(sanitized.items[0].photos[0].id, 'p1');
   // 원본 객체는 오염되지 않음
   assert.ok(dummyTrip.items[0].photoDataUrl);
+  assert.ok(dummyTrip.items[0].photos[0].dataUrl);
 });
 
 // --------------------------------------------------------------------------

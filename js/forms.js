@@ -1,5 +1,5 @@
 /**
- * @intent 6대 카테고리 동적 폼 및 입력 검증 모듈 (공동 결제 및 KRW 원화 단일 통화 최적화)
+ * @intent 6대 카테고리 동적 폼 및 다중 사진(사진 배열) 첨부/관리 지원 모듈
  * @agent  Gemini/manager-develop
  * @branch feat/mytriplog-core
  * @author @developer_name
@@ -49,6 +49,7 @@
       this.editingItemId = null;
       this.uploadedPhotoDataUrl = null;
       this.uploadedPhotoId = null;
+      this.uploadedPhotos = [];
     }
 
     /**
@@ -62,9 +63,16 @@
       const cat = data.category || this.currentCategory || 'ATTRACTION';
       this.currentCategory = cat;
       this.editingItemId = data.id || null;
-      this.uploadedPhotoId = data.photoId || null;
-      this.uploadedPhotoDataUrl = data.photoDataUrl || null;
 
+      if (Array.isArray(data.photos) && data.photos.length > 0) {
+        this.uploadedPhotos = [...data.photos];
+      } else if (data.photoDataUrl) {
+        this.uploadedPhotos = [{ id: data.photoId || 'photo-1', dataUrl: data.photoDataUrl, filename: 'photo' }];
+      } else {
+        this.uploadedPhotos = [];
+      }
+      this.uploadedPhotoId = this.uploadedPhotos.length > 0 ? this.uploadedPhotos[0].id : null;
+      this.uploadedPhotoDataUrl = this.uploadedPhotos.length > 0 ? this.uploadedPhotos[0].dataUrl : null;
 
       const hasCoord = (data.lat !== undefined && data.lat !== null && data.lat !== '' && !isNaN(Number(data.lat))) &&
                        (data.lng !== undefined && data.lng !== null && data.lng !== '' && !isNaN(Number(data.lng)));
@@ -146,20 +154,23 @@
             <input type="hidden" id="item-payer" name="payer" value="공동" />
           </div>
 
-          <!-- 사진 첨부 (E-티켓, 영수증, 명소 사진) -->
+          <!-- 사진 첨부 (E-티켓, 영수증, 명소 사진 - 여러 장 지원) -->
           <div class="form-group photo-upload-group">
             <label class="form-label">사진 첨부 (티켓/바우처/현장 사진)</label>
             <div class="photo-upload-container">
-              <input type="file" id="item-photo-input" accept="image/*" class="hidden-file-input" />
+              <input type="file" id="item-photo-input" accept="image/*" multiple class="hidden-file-input" />
               <button type="button" id="btn-trigger-photo" class="btn btn-outline">
                 ${typeof Icons !== 'undefined' ? Icons.getIcon('IMAGE', { size: 16 }) : ''}
-                <span>사진 선택 (최대 1200px 자동 압축)</span>
+                <span>사진 추가 (여러 장 선택 가능)</span>
               </button>
-              <div id="photo-preview-wrapper" class="photo-preview-wrapper ${this.uploadedPhotoDataUrl ? '' : 'hidden'}">
-                <img id="photo-preview-img" src="${escapeHtml(this.uploadedPhotoDataUrl || '')}" alt="미리보기" />
-                <button type="button" id="btn-remove-photo" class="btn-remove-photo" title="사진 삭제">
-                  ${typeof Icons !== 'undefined' ? Icons.getIcon('CLOSE', { size: 14 }) : 'X'}
-                </button>
+              <div id="photo-preview-section" class="photo-preview-section ${this.uploadedPhotos.length > 0 ? '' : 'hidden'}">
+                <div class="photo-preview-header">
+                  <span class="photo-preview-count" id="photo-preview-count">첨부된 사진 (${this.uploadedPhotos.length}장)</span>
+                  <button type="button" id="btn-clear-all-photos" class="btn-clear-photos-text">전체 삭제</button>
+                </div>
+                <div id="photos-preview-grid" class="photos-preview-grid">
+                  ${this.renderPhotosPreviewGridHtml()}
+                </div>
               </div>
             </div>
           </div>
@@ -413,6 +424,25 @@
     }
 
     /**
+     * @intent 첨부된 사진들의 그리드 미리보기 HTML 생성 (인라인 SVG 닫기 아이콘 적용)
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     * @returns {string} 그리드 내부 HTML
+     */
+    renderPhotosPreviewGridHtml() {
+      return (this.uploadedPhotos || []).map((p, idx) => `
+        <div class="photo-preview-item" data-index="${idx}">
+          <img src="${escapeHtml(p.dataUrl)}" alt="사진 ${idx + 1}" />
+          <button type="button" class="btn-remove-single-photo" data-index="${idx}" title="사진 삭제">
+            ${typeof Icons !== 'undefined' ? Icons.getIcon('CLOSE', { size: 12 }) : 'X'}
+          </button>
+        </div>
+      `).join('');
+    }
+
+    /**
      * 폼 제출 데이터 수집 및 객체 생성
      * @param {HTMLFormElement} form 
      * @returns {object} 수집된 일정 객체
@@ -434,11 +464,13 @@
         }
       }
 
-      if (this.uploadedPhotoId) {
-        result.photoId = this.uploadedPhotoId;
-      }
-      if (this.uploadedPhotoDataUrl) {
-        result.photoDataUrl = this.uploadedPhotoDataUrl;
+      result.photos = this.uploadedPhotos;
+      if (this.uploadedPhotos && this.uploadedPhotos.length > 0) {
+        result.photoId = this.uploadedPhotos[0].id;
+        result.photoDataUrl = this.uploadedPhotos[0].dataUrl;
+      } else {
+        result.photoId = null;
+        result.photoDataUrl = null;
       }
 
       return result;
