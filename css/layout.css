@@ -417,12 +417,12 @@
     border-radius: 20px 20px 0 0;
     box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.2) !important;
     z-index: var(--z-bottomsheet) !important;
-    transition: height var(--transition-slow), transform var(--transition-slow);
-    will-change: height, transform;
+    transition: transform 0.36s cubic-bezier(0.22, 1, 0.36, 1), height 0.36s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform, height;
     overflow: hidden;
   }
 
-  /* 손가락 터치 드래그 중 transition 해제 */
+  /* 손가락 터치/마우스 드래그 중 transition 해제 */
   .side-panel.is-dragging {
     transition: none !important;
   }
@@ -450,27 +450,32 @@
     transform: translateY(0) !important;
   }
 
-  /* 모바일 바텀시트 상단 핸들 및 닫기 버튼 바 */
+  /* 모바일 바텀시트 상단 핸들 컨테이너 */
   .bottom-sheet-handle-container {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 6px 12px 4px 16px;
+    justify-content: center;
+    padding: 8px 16px 6px;
     height: 36px;
     width: 100%;
     touch-action: none;
     -webkit-user-select: none;
     user-select: none;
+    cursor: grab;
     border-bottom: 1px solid var(--border-subtle);
   }
 
+  .bottom-sheet-handle-container:active {
+    cursor: grabbing;
+  }
+
   .bottom-sheet-handle {
-    flex: 1;
+    width: 100%;
     display: flex;
     justify-content: center;
     align-items: center;
     cursor: grab;
-    padding: 8px 0;
+    padding: 4px 0;
   }
 
   .bottom-sheet-handle:active {
@@ -478,39 +483,19 @@
   }
 
   .bottom-sheet-handle-bar {
-    width: 44px;
+    width: 48px;
     height: 5px;
     background-color: var(--gray-300);
-    border-radius: var(--radius-full);
-    transition: background-color var(--transition-fast);
+    border-radius: 9999px;
+    transition: background-color 0.2s, transform 0.2s;
   }
 
-  .bottom-sheet-handle:hover .bottom-sheet-handle-bar {
-    background-color: var(--gray-400);
-  }
-
-  .btn-sheet-close {
-    width: 28px;
-    height: 28px;
-    border-radius: var(--radius-full);
-    border: none;
-    background-color: var(--gray-100);
-    color: var(--gray-600);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    flex-shrink: 0;
-  }
-
-  .btn-sheet-close:hover {
-    background-color: var(--gray-200);
-    color: var(--gray-900);
-  }
-
-  .btn-sheet-close:active {
-    transform: scale(0.92);
+  .bottom-sheet-handle:hover .bottom-sheet-handle-bar,
+  .bottom-sheet-handle:active .bottom-sheet-handle-bar,
+  .bottom-sheet-handle-container:hover .bottom-sheet-handle-bar,
+  .bottom-sheet-handle-container:active .bottom-sheet-handle-bar {
+    background-color: var(--gray-500);
+    transform: scaleX(1.08);
   }
 
   /* 모바일 하단 네비게이션 바 */

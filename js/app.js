@@ -35,7 +35,6 @@
     panelContentArea: document.getElementById('panel-content-area'),
     sidePanel: document.getElementById('side-panel'),
     bottomSheetHandle: document.getElementById('bottom-sheet-handle'),
-    btnSheetClose: document.getElementById('btn-sheet-close'),
 
     // 모바일 전용 하단 내비게이션 요소 (지도, 일정, 추가, 경비)
     mobileBottomNav: document.getElementById('mobile-bottom-nav'),
@@ -103,13 +102,21 @@
   }
 
   /**
-   * 모바일 바텀시트 상태 설정
+   * @intent 모바일 바텀시트 상태 설정 및 인라인 트랜스폼 리셋
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
    * @param {'hidden'|'peek'|'half'|'full'} state 
    */
   function setBottomSheetState(state) {
     currentSheetState = state;
-    dom.sidePanel.classList.remove('sheet-hidden', 'sheet-peek', 'sheet-half', 'sheet-full');
-    dom.sidePanel.classList.add(`sheet-${state}`);
+    if (dom.sidePanel) {
+      dom.sidePanel.style.transform = '';
+      dom.sidePanel.style.height = '';
+      dom.sidePanel.classList.remove('sheet-hidden', 'sheet-peek', 'sheet-half', 'sheet-full');
+      dom.sidePanel.classList.add(`sheet-${state}`);
+    }
 
     if (state === 'hidden') {
       syncMobileNavActiveState('map');
@@ -121,96 +128,218 @@
   }
 
   /**
-   * 모바일 바텀시트 단계 순환 토글 (hidden -> half -> full -> hidden)
+   * @intent 모바일 바텀시트 단계 순환 토글 (hidden/peek -> half, half -> full, full -> half)
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
    */
   function cycleBottomSheetState() {
-    if (currentSheetState === 'hidden') setBottomSheetState('half');
-    else if (currentSheetState === 'peek') setBottomSheetState('half');
-    else if (currentSheetState === 'half') setBottomSheetState('full');
-    else setBottomSheetState('hidden');
+    if (currentSheetState === 'hidden' || currentSheetState === 'peek') {
+      setBottomSheetState('half');
+    } else if (currentSheetState === 'half') {
+      setBottomSheetState('full');
+    } else if (currentSheetState === 'full') {
+      setBottomSheetState('half');
+    } else {
+      setBottomSheetState('half');
+    }
   }
 
   /**
-   * 모바일 바텀시트 터치 스와이프 제스처 엔진 초기화
+   * @intent 모바일 바텀시트 제스처 엔진 (Pointer/Touch 기반 실시간 GPU transform 및 부드러운 스냅)
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
    */
   function initBottomSheetTouchGesture() {
-    if (!dom.bottomSheetHandle) return;
+    const handle = dom.bottomSheetHandle;
+    const panel = dom.sidePanel;
+    if (!handle || !panel) return;
 
-    let touchStartY = 0;
-    let initialHeight = 0;
+    // 핸들 또는 상단 핸들 컨테이너 전체를 터치 타겟으로 활용
+    const handleTarget = handle.parentElement || handle;
+
     let isDragging = false;
-    let dragDistance = 0;
+    let startY = 0;
+    let lastY = 0;
+    let lastTime = 0;
+    let velocity = 0; // px / ms (아래로: 양수, 위로: 음수)
+    let currentDeltaY = 0;
+    let initialPanelHeight = 0;
+    let activePointerId = null;
 
-    dom.bottomSheetHandle.addEventListener('touchstart', (e) => {
+    function onPointerDown(e) {
       if (window.innerWidth > 900) return;
-      const touch = e.touches[0];
-      touchStartY = touch.clientY;
-      initialHeight = dom.sidePanel.getBoundingClientRect().height;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+
       isDragging = true;
-      dragDistance = 0;
-      dom.sidePanel.classList.add('is-dragging');
-    }, { passive: true });
+      activePointerId = e.pointerId ?? null;
+      startY = e.clientY;
+      lastY = e.clientY;
+      lastTime = performance.now();
+      currentDeltaY = 0;
+      velocity = 0;
+      initialPanelHeight = panel.getBoundingClientRect().height;
 
-    window.addEventListener('touchmove', (e) => {
+      panel.classList.add('is-dragging');
+
+      if (e.target && e.target.setPointerCapture && activePointerId !== null) {
+        try {
+          e.target.setPointerCapture(activePointerId);
+        } catch (_) {}
+      }
+    }
+
+    function onPointerMove(e) {
       if (!isDragging || window.innerWidth > 900) return;
-      const currentY = e.touches[0].clientY;
-      dragDistance = touchStartY - currentY; // 위로 올리면 양수, 아래로 내리면 음수
+      if (activePointerId !== null && e.pointerId !== undefined && e.pointerId !== activePointerId) return;
 
-      const windowH = window.innerHeight;
-      const minH = 70;
-      const maxH = windowH - 54;
-      const calculatedHeight = Math.max(minH, Math.min(maxH, initialHeight + dragDistance));
+      const currentY = e.clientY;
+      const now = performance.now();
+      const dt = now - lastTime;
 
-      dom.sidePanel.style.height = `${calculatedHeight}px`;
-    }, { passive: true });
+      if (dt > 8) {
+        const instantVelocity = (currentY - lastY) / dt;
+        velocity = velocity * 0.4 + instantVelocity * 0.6;
+        lastY = currentY;
+        lastTime = now;
+      }
 
-    window.addEventListener('touchend', () => {
-      if (!isDragging || window.innerWidth > 900) return;
+      currentDeltaY = currentY - startY; // 아래로 드래그: 양수, 위로 드래그: 음수
+
+      let offsetY = currentDeltaY;
+
+      // 위로 드래그 시 (offsetY < 0): 최대 높이 초과 시 부드러운 저항감 적용
+      if (offsetY < 0) {
+        const windowH = window.innerHeight;
+        const maxSheetHeight = windowH - 110;
+        const upwardAllowance = Math.max(0, maxSheetHeight - initialPanelHeight);
+
+        if (-offsetY > upwardAllowance) {
+          const overDistance = -offsetY - upwardAllowance;
+          offsetY = -(upwardAllowance + overDistance * 0.22);
+        }
+      }
+
+      // 아래로 과도하게 드래그 시 저항감 적용
+      if (offsetY > initialPanelHeight) {
+        const overDistance = offsetY - initialPanelHeight;
+        offsetY = initialPanelHeight + overDistance * 0.25;
+      }
+
+      // 실시간 GPU 컴포지팅 가속
+      panel.style.transform = `translate3d(0, ${offsetY}px, 0)`;
+    }
+
+    function onPointerUp(e) {
+      if (!isDragging) return;
+      if (activePointerId !== null && e.pointerId !== undefined && e.pointerId !== activePointerId) return;
+
       isDragging = false;
-      dom.sidePanel.classList.remove('is-dragging');
-      dom.sidePanel.style.height = ''; // 인라인 스타일 제거
+      panel.classList.remove('is-dragging');
 
+      if (e.target && e.target.releasePointerCapture && activePointerId !== null) {
+        try {
+          e.target.releasePointerCapture(activePointerId);
+        } catch (_) {}
+      }
+      activePointerId = null;
+
+      // 1. 단순 탭(클릭) 인터랙션: 드래그 변위가 6px 미만인 경우
+      if (Math.abs(currentDeltaY) < 6) {
+        panel.style.transform = '';
+        cycleBottomSheetState();
+        return;
+      }
+
+      // 2. 드래그 완료 후 스냅 목표 상태 결정
       const windowH = window.innerHeight;
+      const fullHeight = windowH - 110;
+      const halfHeight = windowH * 0.48;
 
-      // 미세한 탭인 경우 (이동거리 8px 미만) -> 단계 순환
-      if (Math.abs(dragDistance) < 8) {
-        cycleBottomSheetState();
-        return;
-      }
+      let targetState = currentSheetState;
 
-      // 빠른 위로 스와이프 (위로 50px 이상 이동)
-      if (dragDistance > 60) {
-        if (currentSheetState === 'peek') setBottomSheetState('half');
-        else setBottomSheetState('full');
-        return;
-      }
+      // 플릭/스와이프 속도 및 이동 거리 판정
+      const isFlickDown = velocity > 0.45 || currentDeltaY > 80;
+      const isFlickUp = velocity < -0.45 || currentDeltaY < -80;
 
-      // 빠른 아래로 스와이프 (아래로 60px 이상 이동)
-      if (dragDistance < -60) {
-        if (currentSheetState === 'full') setBottomSheetState('half');
-        else setBottomSheetState('hidden');
-        return;
-      }
-
-      // 위치 기반 가장 가까운 스냅 지점 계산
-      const finalH = initialHeight + dragDistance;
-      const ratio = finalH / windowH;
-
-      if (ratio > 0.65) {
-        setBottomSheetState('full');
-      } else if (ratio < 0.22) {
-        setBottomSheetState('hidden');
+      if (isFlickDown) {
+        // 아래로 휙 내렸거나 일정 이상 내렸을 때
+        if (currentSheetState === 'full') {
+          if (currentDeltaY > 200 || velocity > 0.85) {
+            targetState = 'hidden';
+          } else {
+            targetState = 'half';
+          }
+        } else {
+          // half 또는 peek 상태에서 내렸을 때 hidden으로 쏙 들어감
+          targetState = 'hidden';
+        }
+      } else if (isFlickUp) {
+        // 위로 휙 올렸거나 일정 이상 올렸을 때
+        if (currentSheetState === 'hidden' || currentSheetState === 'peek') {
+          targetState = 'half';
+        } else {
+          // half였으면 full로 쑥 올라옴
+          targetState = 'full';
+        }
       } else {
-        setBottomSheetState('half');
-      }
-    });
+        // 천천히 놓았을 때는 놓은 위치에서 가장 가까운 상태(hidden / half / full)로 스냅
+        const effectiveHeight = initialPanelHeight - currentDeltaY;
+        const distToFull = Math.abs(effectiveHeight - fullHeight);
+        const distToHalf = Math.abs(effectiveHeight - halfHeight);
+        const distToHidden = Math.abs(effectiveHeight - 0);
 
-    // 데스크톱 또는 마우스 클릭 시 순환
-    dom.bottomSheetHandle.addEventListener('click', (e) => {
-      if (Math.abs(dragDistance) < 5) {
-        cycleBottomSheetState();
+        if (effectiveHeight < halfHeight * 0.4) {
+          targetState = 'hidden';
+        } else if (distToFull < distToHalf && distToFull < distToHidden) {
+          targetState = 'full';
+        } else if (distToHidden < distToHalf && distToHidden < distToFull) {
+          targetState = 'hidden';
+        } else {
+          targetState = 'half';
+        }
       }
-    });
+
+      panel.style.transform = '';
+      setBottomSheetState(targetState);
+    }
+
+    if (window.PointerEvent) {
+      handleTarget.addEventListener('pointerdown', onPointerDown);
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
+      window.addEventListener('pointercancel', onPointerUp);
+    } else {
+      // Touch fallback (구형 브라우저 대응)
+      handleTarget.addEventListener('touchstart', (e) => {
+        const touch = e.touches[0];
+        onPointerDown({
+          clientY: touch.clientY,
+          pointerType: 'touch',
+          pointerId: 1,
+          target: handleTarget
+        });
+      }, { passive: true });
+
+      window.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        const touch = e.touches[0];
+        onPointerMove({
+          clientY: touch.clientY,
+          pointerId: 1
+        });
+      }, { passive: true });
+
+      window.addEventListener('touchend', () => {
+        onPointerUp({ pointerId: 1, target: handleTarget });
+      });
+      window.addEventListener('touchcancel', () => {
+        onPointerUp({ pointerId: 1, target: handleTarget });
+      });
+    }
   }
 
 
@@ -1133,12 +1262,7 @@
       if (currentSheetState === 'hidden') setBottomSheetState('half');
     });
 
-    // 8. 모바일 바텀시트 닫기 버튼 이벤트
-    dom.btnSheetClose?.addEventListener('click', () => {
-      setBottomSheetState('hidden');
-    });
-
-    // 9. 모바일 하단 내비게이션 바 버튼 리스너 (지도, 일정, 추가, 경비)
+    // 8. 모바일 하단 내비게이션 바 버튼 리스너 (지도, 일정, 추가, 경비)
     dom.mNavMap?.addEventListener('click', () => {
       setBottomSheetState('hidden');
       showToast('지도 전체화면 모드');
