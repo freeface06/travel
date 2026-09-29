@@ -849,58 +849,48 @@
       });
     });
 
-    // Nominatim 주소/장소 검색
-    const searchInput = document.getElementById('place-search-input');
-    const searchBtn = document.getElementById('btn-search-place');
-    const dropdown = document.getElementById('search-results-dropdown');
-    const latInput = document.getElementById('item-lat');
-    const lngInput = document.getElementById('item-lng');
+    // 위치 초기화 버튼 (#btn-clear-location)
+    /**
+     * @intent 지정된 위치(위도, 경도, 장소명) 초기화 및 UI 뱃지/버튼 상태 리셋
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     */
+    const clearLocationBtn = document.getElementById('btn-clear-location');
+    clearLocationBtn?.addEventListener('click', () => {
+      const latInput = document.getElementById('item-lat');
+      const lngInput = document.getElementById('item-lng');
+      const searchInput = document.getElementById('place-search-input');
+      const statusBadge = document.getElementById('location-status-badge');
+      const badgeText = document.getElementById('location-badge-text');
+      const pickBtn = document.getElementById('btn-pick-on-map');
 
-    const handleSearch = async () => {
-      const q = searchInput.value.trim();
-      if (!q) return;
-      dropdown.innerHTML = '<div class="search-dropdown-item" style="color:var(--text-muted);">검색 중...</div>';
-      dropdown.classList.remove('hidden');
-
-      const results = await TripGeocoder.searchPlaces(q);
-      if (results.length === 0) {
-        dropdown.innerHTML = '<div class="search-dropdown-item" style="color:var(--text-muted);">검색 결과가 없습니다.</div>';
-        return;
+      if (latInput) {
+        latInput.value = '';
+        latInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (lngInput) {
+        lngInput.value = '';
+        lngInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (searchInput) {
+        searchInput.value = '';
+        searchInput.dispatchEvent(new Event('input', { bubbles: true }));
       }
 
-      dropdown.innerHTML = results.map((r, idx) => `
-        <div class="search-dropdown-item" data-idx="${idx}">
-          <strong>${escapeHtml(r.name)}</strong><br>
-          <span style="font-size:0.75rem; color:var(--text-muted);">${escapeHtml(r.displayName)}</span>
-        </div>
-      `).join('');
-
-      dropdown.querySelectorAll('.search-dropdown-item').forEach((itemEl) => {
-        itemEl.addEventListener('click', () => {
-          const idx = itemEl.dataset.idx;
-          const chosen = results[idx];
-          if (chosen) {
-            latInput.value = chosen.lat;
-            lngInput.value = chosen.lng;
-            searchInput.value = chosen.name;
-            const titleInput = document.getElementById('item-title');
-            if (titleInput && !titleInput.value) {
-              titleInput.value = chosen.name;
-            }
-            dropdown.classList.add('hidden');
-            mapManager.setPinDropPreview(chosen.lat, chosen.lng);
-            showToast(`좌표가 지정되었습니다: ${chosen.name}`);
-          }
-        });
-      });
-    };
-
-    searchBtn?.addEventListener('click', handleSearch);
-    searchInput?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        handleSearch();
+      statusBadge?.classList.remove('has-location');
+      if (badgeText) {
+        badgeText.textContent = '지도에서 위치를 지정해 주세요';
       }
+      const pickBtnSpan = pickBtn?.querySelector('span');
+      if (pickBtnSpan) {
+        pickBtnSpan.textContent = '지도 핀 지정';
+      }
+      clearLocationBtn.classList.add('hidden');
+      activePickerCoord = null;
+      mapManager.setPinDropMode(false);
+      showToast('위치 지정이 해제되었습니다.');
     });
 
     // 지도 핀 드롭 버튼 클릭 (지도 핀 위치 선택 모드 진입)
@@ -1578,6 +1568,17 @@
           lngInput.value = lng.toFixed(5);
           latInput.dispatchEvent(new Event('input', { bubbles: true }));
           lngInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+          const statusBadge = document.getElementById('location-status-badge');
+          const badgeText = document.getElementById('location-badge-text');
+          const pickBtn = document.getElementById('btn-pick-on-map');
+          const clearBtn = document.getElementById('btn-clear-location');
+
+          if (statusBadge) statusBadge.classList.add('has-location');
+          if (badgeText) badgeText.textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+          const pickBtnSpan = pickBtn?.querySelector('span');
+          if (pickBtnSpan) pickBtnSpan.textContent = '위치 변경';
+          if (clearBtn) clearBtn.classList.remove('hidden');
         }
         showToast(`핀 좌표 선택 완료: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
 
@@ -1590,6 +1591,8 @@
           if (searchInput && place && place.name) {
             searchInput.value = place.name;
             searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+            const badgeText = document.getElementById('location-badge-text');
+            if (badgeText) badgeText.textContent = place.name;
           }
         } catch (err) {
           // 무시
@@ -1599,7 +1602,7 @@
 
     // 4-1. 지도 핀 위치 선택 완료 버튼 (#btn-pin-picker-confirm)
     /**
-     * @intent 핀 선택 완료 시 폼 필드 주입 및 모달 팝업 복귀 확실성 보장
+     * @intent 핀 선택 완료 시 폼 필드 주입, 위치 뱃지 업데이트 및 모달 팝업 복귀 확실성 보장
      * @agent  Gemini/manager-develop
      * @branch feat/mytriplog-core
      * @author @developer_name
@@ -1634,6 +1637,26 @@
       if (titleInput && !titleInput.value.trim()) {
         titleInput.value = placeLabel;
         titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+
+      // 위치 뱃지 및 버튼 상태 업데이트
+      const statusBadge = document.getElementById('location-status-badge');
+      const badgeText = document.getElementById('location-badge-text');
+      const pickBtn = document.getElementById('btn-pick-on-map');
+      const clearBtn = document.getElementById('btn-clear-location');
+
+      if (statusBadge) {
+        statusBadge.classList.add('has-location');
+      }
+      if (badgeText) {
+        badgeText.textContent = placeLabel || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      }
+      const pickBtnSpan = pickBtn?.querySelector('span');
+      if (pickBtnSpan) {
+        pickBtnSpan.textContent = '위치 변경';
+      }
+      if (clearBtn) {
+        clearBtn.classList.remove('hidden');
       }
 
       // 카테고리별 명칭 필드가 비어있다면 자동 입력:

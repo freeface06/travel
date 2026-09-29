@@ -648,6 +648,57 @@
   gap: 12px;
 }
 
+.location-picker-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.location-status-badge {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background-color: var(--gray-50);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  color: var(--gray-600);
+  transition: all var(--transition-fast);
+}
+
+.location-status-badge.has-location {
+  background-color: var(--primary-50);
+  border-color: var(--primary-200);
+  color: var(--primary-700);
+  font-weight: 600;
+}
+
+.location-badge-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.location-badge-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-pick-on-map {
+  flex-shrink: 0;
+  height: 42px;
+}
+
+.btn-clear-location {
+  flex-shrink: 0;
+  height: 42px;
+}
+
 .location-search-box {
   display: flex;
   gap: 8px;
@@ -1162,6 +1213,24 @@
   .category-pill {
     padding: 5px 10px;
     font-size: 0.75rem;
+  }
+
+  /* 모바일 위치 피커 박스 최적화 */
+  .location-picker-box {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .location-status-badge {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .btn-pick-on-map,
+  .btn-clear-location {
+    flex: 1;
+    min-width: 0;
+    justify-content: center;
   }
 
   /* 타임라인 카드 패딩 및 폰트 축소 */

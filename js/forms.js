@@ -79,6 +79,9 @@
         return `<option value="${escapeHtml(p)}"${selected}>${escapeHtml(label)}</option>`;
       }).join('');
 
+      const hasCoord = (data.lat !== undefined && data.lat !== null && data.lat !== '' && !isNaN(Number(data.lat))) &&
+                       (data.lng !== undefined && data.lng !== null && data.lng !== '' && !isNaN(Number(data.lng)));
+
       return `
         <form id="item-editor-form" class="editor-form" novalidate>
           <input type="hidden" name="itemId" value="${escapeHtml(data.id || '')}" />
@@ -120,33 +123,28 @@
             ${this.renderCategorySpecificFields(cat, data)}
           </div>
 
-          <!-- 위치 검색 및 좌표 지정 섹션 -->
+          <!-- 위치 지정 (지도 표시) 섹션 -->
           <div class="form-group location-section">
-            <label class="form-label">위치 좌표 설정 (지도 표시)</label>
-            <div class="location-search-box">
-              <input type="text" id="place-search-input" class="form-control" 
-                     placeholder="주소나 장소 검색 (Nominatim OpenStreetMap)" autocomplete="off" />
-              <button type="button" id="btn-search-place" class="btn btn-secondary">
-                ${typeof Icons !== 'undefined' ? Icons.getIcon('SEARCH', { size: 16 }) : ''}
-                <span>검색</span>
+            <label class="form-label">위치 지정 (지도 표시)</label>
+            <div class="location-picker-box">
+              <div class="location-status-badge ${hasCoord ? 'has-location' : ''}" id="location-status-badge">
+                <div class="location-badge-icon">
+                  ${typeof Icons !== 'undefined' ? Icons.getIcon('LOCATION_TARGET', { size: 16 }) : ''}
+                </div>
+                <span class="location-badge-text" id="location-badge-text">
+                  ${hasCoord ? escapeHtml(data.address || `${Number(data.lat).toFixed(4)}, ${Number(data.lng).toFixed(4)}`) : '지도에서 위치를 지정해 주세요'}
+                </span>
+              </div>
+              <button type="button" id="btn-pick-on-map" class="btn btn-primary btn-pick-on-map" title="지도에서 위치 선택">
+                <span>${hasCoord ? '위치 변경' : '지도 핀 지정'}</span>
               </button>
-              <button type="button" id="btn-pick-on-map" class="btn btn-outline" title="지도에서 직접 클릭하여 위치 선택">
-                ${typeof Icons !== 'undefined' ? Icons.getIcon('LOCATION_TARGET', { size: 16 }) : ''}
-                <span>지도 핀 지정</span>
+              <button type="button" id="btn-clear-location" class="btn btn-outline btn-clear-location ${hasCoord ? '' : 'hidden'}" title="위치 초기화">
+                <span>초기화</span>
               </button>
             </div>
-            <div id="search-results-dropdown" class="search-dropdown hidden"></div>
-
-            <div class="form-row coords-row">
-              <div class="form-group flex-1">
-                <input type="number" step="any" id="item-lat" name="lat" class="form-control text-sm" 
-                       placeholder="위도(Lat)" value="${data.lat !== undefined ? data.lat : ''}" />
-              </div>
-              <div class="form-group flex-1">
-                <input type="number" step="any" id="item-lng" name="lng" class="form-control text-sm" 
-                       placeholder="경도(Lng)" value="${data.lng !== undefined ? data.lng : ''}" />
-              </div>
-            </div>
+            <input type="hidden" id="item-lat" name="lat" value="${data.lat !== undefined && data.lat !== '' && data.lat !== null ? data.lat : ''}" />
+            <input type="hidden" id="item-lng" name="lng" value="${data.lng !== undefined && data.lng !== '' && data.lng !== null ? data.lng : ''}" />
+            <input type="hidden" id="place-search-input" value="${escapeHtml(data.address || data.title || '')}" />
           </div>
 
           <!-- 비용 및 결제자 정보 -->
