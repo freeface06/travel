@@ -28,10 +28,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js" crossorigin=""></script>
 
   <!-- 스타일시트 (캐시 버스팅 적용) -->
-  <link rel="stylesheet" href="css/reset.css?v=20260929_1840" />
-  <link rel="stylesheet" href="css/variables.css?v=20260929_1840" />
-  <link rel="stylesheet" href="css/layout.css?v=20260929_1840" />
-  <link rel="stylesheet" href="css/components.css?v=20260929_1840" />
+  <link rel="stylesheet" href="css/reset.css?v=20260929_1850" />
+  <link rel="stylesheet" href="css/variables.css?v=20260929_1850" />
+  <link rel="stylesheet" href="css/layout.css?v=20260929_1850" />
+  <link rel="stylesheet" href="css/components.css?v=20260929_1850" />
 </head>
 <body>
   <div class="app-container">
@@ -45,13 +45,17 @@
           </svg>
         </div>
         <div class="brand-info brand-info-clickable" id="brand-info" role="button" tabindex="0" title="여행 계획 목록 및 비교 열기" style="cursor: pointer;">
-          <div class="brand-title-wrap" style="display: inline-flex; align-items: center; gap: 4px;">
+          <div class="brand-title-wrap" style="display: inline-flex; align-items: center; gap: 6px;">
             <h1 id="trip-title" class="brand-title">로딩 중...</h1>
             <svg class="brand-title-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true" style="opacity: 0.7; flex-shrink: 0;">
               <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
             </svg>
           </div>
-          <span id="trip-period" class="brand-period">기간 로딩 중</span>
+          <div class="brand-meta-row">
+            <span id="trip-dday-badge" class="trip-dday-badge hidden">D-Day</span>
+            <span id="trip-period" class="brand-period">기간 로딩 중</span>
+            <span id="trip-summary-chip" class="trip-summary-chip hidden">일정 요약</span>
+          </div>
         </div>
       </div>
 
@@ -239,17 +243,17 @@
 
   <!-- Supabase 공식 클라이언트 라이브러리 및 연동 매니저 -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/supabase.js?v=20260929_1840"></script>
+  <script src="js/supabase.js?v=20260929_1850"></script>
 
   <!-- 스크립트 모듈 로드 (캐시 버스팅 적용) -->
-  <script src="js/icons.js?v=20260929_1840"></script>
-  <script src="js/db.js?v=20260929_1840"></script>
-  <script src="js/expense.js?v=20260929_1840"></script>
-  <script src="js/store.js?v=20260929_1840"></script>
-  <script src="js/geocoder.js?v=20260929_1840"></script>
-  <script src="js/map.js?v=20260929_1840"></script>
-  <script src="js/forms.js?v=20260929_1840"></script>
-  <script src="js/share.js?v=20260929_1840"></script>
-  <script src="js/app.js?v=20260929_1840"></script>
+  <script src="js/icons.js?v=20260929_1850"></script>
+  <script src="js/db.js?v=20260929_1850"></script>
+  <script src="js/expense.js?v=20260929_1850"></script>
+  <script src="js/store.js?v=20260929_1850"></script>
+  <script src="js/geocoder.js?v=20260929_1850"></script>
+  <script src="js/map.js?v=20260929_1850"></script>
+  <script src="js/forms.js?v=20260929_1850"></script>
+  <script src="js/share.js?v=20260929_1850"></script>
+  <script src="js/app.js?v=20260929_1850"></script>
 </body>
 </html>

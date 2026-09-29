@@ -92,6 +92,31 @@
   --z-toast: 12000;
 
 
+  /* 트래블 앱 감성 그라디언트 토큰 */
+  --grad-travel-hero: linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #06b6d4 100%);
+  --grad-card-shine: linear-gradient(120deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0) 100%);
+  --grad-day-active: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  --grad-expense-hero: linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #334155 100%);
+  --grad-dday-badge: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+
+  /* 스루라인(동선 연결선) 토큰 */
+  --timeline-line-color: #cbd5e1;
+  --timeline-line-active: #3b82f6;
+  --timeline-line-width: 2px;
+  --timeline-node-size: 26px;
+
+  /* 애플 및 네이티브 모바일 앱 스타일 소프트 섀도우 */
+  --shadow-card-elevated: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+  --shadow-app-float: 0 20px 35px -8px rgba(15, 23, 42, 0.14), 0 6px 14px -3px rgba(15, 23, 42, 0.06);
+  --shadow-glow-primary: 0 4px 16px rgba(37, 99, 235, 0.3);
+  --shadow-glow-day: 0 4px 12px rgba(37, 99, 235, 0.28);
+
+  /* 글래스모피즘 서피스 토큰 */
+  --glass-bg: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.45);
+  --glass-blur: blur(20px);
+  --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+
   /* 반응형 및 SafeArea 토큰 */
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);

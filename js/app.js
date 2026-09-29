@@ -23,6 +23,8 @@
     brandInfo: document.getElementById('brand-info'),
     tripTitle: document.getElementById('trip-title'),
     tripPeriod: document.getElementById('trip-period'),
+    tripDdayBadge: document.getElementById('trip-dday-badge'),
+    tripSummaryChip: document.getElementById('trip-summary-chip'),
     btnHeaderMenu: document.getElementById('btn-header-menu'),
     headerDropdownMenu: document.getElementById('header-dropdown-menu'),
     btnMenuEditTrip: document.getElementById('btn-menu-edit-trip'),
@@ -445,26 +447,135 @@
     return max;
   }
 
+  const DAY_OF_WEEK_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
+
   /**
-   * 상단 헤더 텍스트 렌더링
+   * @intent 여행 시작일/종료일 기반 오늘 실시간 D-Day 계산 및 상태 문자열 산출
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   * @param {string} startDateStr - YYYY-MM-DD
+   * @param {string} endDateStr - YYYY-MM-DD
+   * @returns {{text: string, state: 'before'|'today'|'ongoing'|'completed'}|null}
+   */
+  function calculateTripDday(startDateStr, endDateStr) {
+    if (!startDateStr) return null;
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+    const startParts = startDateStr.split('-').map(Number);
+    if (startParts.length < 3 || isNaN(startParts[0])) return null;
+    const startDate = new Date(startParts[0], startParts[1] - 1, startParts[2]).getTime();
+
+    let endDate = null;
+    if (endDateStr) {
+      const endParts = endDateStr.split('-').map(Number);
+      if (endParts.length >= 3 && !isNaN(endParts[0])) {
+        endDate = new Date(endParts[0], endParts[1] - 1, endParts[2]).getTime();
+      }
+    }
+
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const diffDaysFromStart = Math.round((startDate - today) / msPerDay);
+
+    if (diffDaysFromStart > 0) {
+      // 오늘 이전 (출발 전)
+      return { text: `D-${diffDaysFromStart}`, state: 'before' };
+    } else if (diffDaysFromStart === 0) {
+      // 시작일 당일
+      return { text: '오늘 출발! D-Day', state: 'today' };
+    } else {
+      // 시작일 이후
+      if (endDate && today > endDate) {
+        return { text: '여행 완료', state: 'completed' };
+      }
+      const ongoingDay = Math.abs(diffDaysFromStart) + 1;
+      return { text: `여행 ${ongoingDay}일차`, state: 'ongoing' };
+    }
+  }
+
+  /**
+   * @intent 시작일 기준 Day 번호에 해당하는 월/일/요일 텍스트 반환
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   * @param {string} startDateStr - YYYY-MM-DD
+   * @param {number} dayNumber - 1-based Day 번호
+   * @returns {string} 예: "(10.15 화)"
+   */
+  function formatDayDateLabel(startDateStr, dayNumber) {
+    if (!startDateStr) return '';
+    const parts = startDateStr.split('-').map(Number);
+    if (parts.length < 3 || isNaN(parts[0])) return '';
+
+    const dateObj = new Date(parts[0], parts[1] - 1, parts[2] + (dayNumber - 1));
+    const m = dateObj.getMonth() + 1;
+    const d = dateObj.getDate();
+    const dow = DAY_OF_WEEK_NAMES[dateObj.getDay()];
+    return `(${m}.${d} ${dow})`;
+  }
+
+  /**
+   * @intent 상단 헤더 텍스트 및 D-Day 실시간 계산 뱃지, 일정 요약 칩 동기화 렌더링
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   * @param {object} trip
    */
   function renderHeader(trip) {
     const meta = trip.metadata || {};
     dom.tripTitle.textContent = meta.title || '나의 여행 일정';
     dom.tripPeriod.textContent = `${meta.startDate || '출발일 미정'} ~ ${meta.endDate || '도착일 미정'}`;
+
+    // D-Day 실시간 계산 뱃지 동기화
+    if (dom.tripDdayBadge) {
+      const dday = calculateTripDday(meta.startDate, meta.endDate);
+      if (dday) {
+        dom.tripDdayBadge.textContent = dday.text;
+        dom.tripDdayBadge.classList.remove('hidden');
+      } else {
+        dom.tripDdayBadge.classList.add('hidden');
+      }
+    }
+
+    // 여행 일정 요약 칩 동기화
+    if (dom.tripSummaryChip) {
+      const itemCount = (trip.items || []).length;
+      if (itemCount > 0) {
+        dom.tripSummaryChip.textContent = `총 ${itemCount}개 일정`;
+        dom.tripSummaryChip.classList.remove('hidden');
+      } else {
+        dom.tripSummaryChip.classList.add('hidden');
+      }
+    }
   }
 
   /**
-   * 일차(Day) 탭 바 렌더링
+   * @intent 일차(Day) 탭 바 렌더링 (실제 날짜 및 요일 감성 표기, 활성 그라디언트 테마 지원)
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   * @param {object} trip
+   * @param {number} selectedDay
    */
   function renderDayTabs(trip, selectedDay) {
+    const meta = trip.metadata || {};
     const maxDays = Math.max(3, getMaxDays(trip.items));
     dom.daySelectorBar.innerHTML = '';
 
     for (let d = 1; d <= maxDays; d++) {
       const chip = document.createElement('button');
       chip.className = `day-chip${d === selectedDay ? ' active' : ''}`;
-      chip.innerHTML = `${getIcon('CALENDAR', { size: 14 })} <span>Day ${d}</span>`;
+
+      const dateLabel = formatDayDateLabel(meta.startDate, d);
+      const text = dateLabel ? `Day ${d} ${dateLabel}` : `Day ${d}`;
+
+      chip.innerHTML = `${getIcon('CALENDAR', { size: 14 })} <span>${text}</span>`;
       chip.addEventListener('click', () => {
         store.setSelectedDay(d);
       });
@@ -530,13 +641,20 @@
   }
 
   /**
-   * 타임라인 패널 렌더링
+   * @intent 타임라인 패널 렌더링 - 스루라인(동선 연결선), 모던 트래블 카드, 정제된 미니멀 액션 바(지도/수정/삭제)
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   * @param {object} trip
+   * @param {number} selectedDay
+   * @param {string|null} selectedItemId
    */
   function renderTimelinePanel(trip, selectedDay, selectedItemId) {
     const dayItems = (trip.items || []).filter((item) => Number(item.day) === Number(selectedDay));
 
     let html = `
-      <div class="timeline-toolbar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div class="timeline-toolbar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
         <div style="font-weight:700; font-size:0.95rem; color:var(--text-main);">
           Day ${selectedDay} 일정 (${dayItems.length}개)
         </div>
@@ -562,47 +680,56 @@
       return;
     }
 
-    html += '<div class="timeline-container">';
+    html += '<div class="timeline-flow-wrapper">';
 
     dayItems.forEach((item, index) => {
       const order = index + 1;
       const cat = CATEGORIES[item.category] || { label: '기타', icon: 'NOTE', color: '#64748b' };
-      const isActive = item.id === selectedItemId ? ' is-active' : '';
+      const isActive = item.id === selectedItemId;
+      const activeClass = isActive ? ' is-active' : '';
 
       html += `
-        <div class="timeline-item-card${isActive}" data-id="${escapeHtml(item.id)}">
-          <div class="card-header-row">
-            <div style="display:flex; align-items:center;">
-              <span class="card-order-badge">${order}</span>
-              <span class="category-tag cat-${(item.category || '').toLowerCase()}">
-                ${getIcon(cat.icon, { size: 14 })} <span>${cat.label}</span>
-              </span>
-            </div>
-            ${item.time ? `<div class="card-time-badge">${getIcon('CLOCK', { size: 13 })} ${escapeHtml(item.time)}</div>` : ''}
+        <div class="timeline-flow-item${activeClass}" data-id="${escapeHtml(item.id)}">
+          <div class="timeline-flow-lane">
+            <span class="card-order-marker">${order}</span>
+            <div class="timeline-through-line"></div>
           </div>
-
-          <div class="card-title">${escapeHtml(item.title || '일정')}</div>
-
-          <!-- 카테고리별 핵심 요약 그리드 -->
-          ${renderItemCardDetails(item)}
-
-          <!-- 사진 영역 (단일 또는 다중 그리드) -->
-          ${renderCardPhotosHtml(item)}
-
-          <div class="card-footer-row">
-            <div class="card-cost-info">
-              ${Number(item.cost) > 0 ? `
-                ${getIcon('MONEY', { size: 14, color: 'var(--accent-emerald)' })}
-                <span>${formatAmount(item.cost, 'KRW')}</span>
-              ` : '<span style="color:var(--text-muted); font-weight:normal; font-size:0.75rem;">비용 없음</span>'}
+          <div class="timeline-item-card${activeClass}" data-id="${escapeHtml(item.id)}">
+            <div class="card-header-row">
+              <div class="card-header-left">
+                <span class="category-tag cat-${(item.category || '').toLowerCase()}">
+                  ${getIcon(cat.icon, { size: 14 })} <span>${cat.label}</span>
+                </span>
+              </div>
+              ${item.time ? `<div class="card-time-badge">${getIcon('CLOCK', { size: 13 })} <span>${escapeHtml(item.time)}</span></div>` : ''}
             </div>
-            <div class="card-actions">
-              <button type="button" class="btn-icon btn-edit-item" data-id="${escapeHtml(item.id)}" title="수정">
-                ${getIcon('EDIT', { size: 16 })}
-              </button>
-              <button type="button" class="btn-icon btn-delete-item" data-id="${escapeHtml(item.id)}" title="삭제">
-                ${getIcon('DELETE', { size: 16 })}
-              </button>
+
+            <div class="card-title">${escapeHtml(item.title || '일정')}</div>
+
+            <!-- 카테고리별 핵심 요약 그리드 -->
+            ${renderItemCardDetails(item)}
+
+            <!-- 사진 영역 (단일 또는 다중 그리드) -->
+            ${renderCardPhotosHtml(item)}
+
+            <div class="card-footer-row">
+              <div class="card-cost-info">
+                ${Number(item.cost) > 0 ? `
+                  ${getIcon('MONEY', { size: 14, color: 'var(--accent-emerald)' })}
+                  <span>${formatAmount(item.cost, 'KRW')}</span>
+                ` : '<span class="card-cost-free">비용 없음</span>'}
+              </div>
+              <div class="card-actions">
+                <button type="button" class="card-action-btn btn-view-map" data-id="${escapeHtml(item.id)}" title="지도에서 위치 보기">
+                  ${getIcon('MAP', { size: 13 })} <span>지도</span>
+                </button>
+                <button type="button" class="card-action-btn btn-edit-item" data-id="${escapeHtml(item.id)}" title="수정">
+                  ${getIcon('EDIT', { size: 13 })} <span>수정</span>
+                </button>
+                <button type="button" class="card-action-btn btn-delete-item danger" data-id="${escapeHtml(item.id)}" title="삭제">
+                  ${getIcon('DELETE', { size: 13 })} <span>삭제</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -620,6 +747,17 @@
       card.addEventListener('click', (e) => {
         if (e.target.closest('.card-actions') || e.target.closest('.card-thumbnail') || e.target.closest('.card-photo-item')) return;
         const id = card.dataset.id;
+        store.setSelectedItemId(id);
+        const item = (trip.items || []).find((it) => it.id === id);
+        if (item) mapManager.flyToItem(item);
+      });
+    });
+
+    // 지도 보기 버튼 이벤트
+    dom.panelContentArea.querySelectorAll('.btn-view-map').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.id;
         store.setSelectedItemId(id);
         const item = (trip.items || []).find((it) => it.id === id);
         if (item) mapManager.flyToItem(item);
@@ -744,7 +882,12 @@
   }
 
   /**
-   * 정산(Expense) 대시보드 패널 렌더링 (부부 공동 경비 및 KRW 원화 단일화)
+   * @intent 여행 경비 대시보드 렌더링 - 대형 총 지출액 히어로 카드, 멀티 세그먼트 프로그레스 게이지, 공동 결제 안심 카드, 지출 상위 랭킹 TOP 5
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   * @param {object} trip
    */
   function renderExpensePanel(trip) {
     const meta = trip.metadata || {};
@@ -753,95 +896,164 @@
     const rates = meta.customRates || {};
 
     const { summary } = calculateSettlements(participants, trip.items, baseCurr, rates);
-
     const perPerson = Math.round(summary.totalInBase / 2);
 
-    // 카테고리별 한국어 명칭 및 아이콘 매핑
     const catMeta = {
-      FLIGHT: { label: '항공권', icon: 'FLIGHT' },
-      HOTEL: { label: '숙소/호텔', icon: 'HOTEL' },
-      DINING: { label: '식비/맛집', icon: 'DINING' },
-      ATTRACTION: { label: '관광/투어', icon: 'ATTRACTION' },
-      TRANSIT: { label: '교통/이동', icon: 'TRANSIT' },
-      AIRPORT: { label: '공항/기타', icon: 'AIRPORT' }
+      FLIGHT: { label: '항공권', icon: 'FLIGHT', key: 'flight' },
+      HOTEL: { label: '숙소/호텔', icon: 'HOTEL', key: 'hotel' },
+      DINING: { label: '식비/맛집', icon: 'DINING', key: 'dining' },
+      ATTRACTION: { label: '관광/투어', icon: 'ATTRACTION', key: 'attraction' },
+      TRANSIT: { label: '교통/이동', icon: 'TRANSIT', key: 'transit' },
+      AIRPORT: { label: '공항/기타', icon: 'AIRPORT', key: 'airport' }
     };
 
-    // 카테고리별 지출액 내림차순 정렬
     const catEntries = Object.entries(summary.byCategory || {})
       .filter(([_, amt]) => amt > 0)
       .sort((a, b) => b[1] - a[1]);
 
+    // 지출 상위 아이템 정렬 (비용 내림차순 TOP 5)
+    const paidItems = (trip.items || [])
+      .filter((it) => Number(it.cost) > 0)
+      .sort((a, b) => Number(b.cost) - Number(a.cost));
+    const topCostItems = paidItems.slice(0, 5);
+
     let html = `
       <div class="expense-dashboard">
-        <div style="margin-bottom:12px;">
-          <h3 style="font-size:1rem; font-weight:700; color:var(--text-main); margin-bottom:2px;">부부 공동 경비 대시보드</h3>
-          <span style="font-size:0.78rem; color:var(--text-muted);">통화: KRW (원) | 모든 지출은 부부 공동 경비로 통합 집계됩니다.</span>
+        <!-- 대형 총 지출액 히어로 카드 -->
+        <div class="expense-hero-card">
+          <div class="expense-hero-top">
+            <span class="expense-hero-badge">${getIcon('SHIELD', { size: 13, color: '#e2e8f0' })} 부부 공동 경비</span>
+            <span class="expense-hero-curr">통화: KRW 원</span>
+          </div>
+          <div class="expense-hero-amount-wrap">
+            <span class="expense-hero-label">총 예상 지출액</span>
+            <h2 class="expense-hero-amount">${formatAmount(summary.totalInBase, 'KRW')}</h2>
+          </div>
+          <div class="expense-hero-footer">
+            <div class="expense-hero-chip">
+              ${getIcon('USER', { size: 14, color: '#38bdf8' })}
+              <span>1인당 ${formatAmount(perPerson, 'KRW')} (2인 기준)</span>
+            </div>
+            <span style="font-size:0.75rem; color:#94a3b8; margin-left:auto;">
+              총 ${paidItems.length}건 결제
+            </span>
+          </div>
         </div>
 
-        <!-- 상단 요약 통계 -->
-        <div class="summary-stat-grid">
-          <div class="stat-card">
-            <span class="stat-label">총 여행 경비 (KRW 원)</span>
-            <span class="stat-value">${formatAmount(summary.totalInBase, 'KRW')}</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">1인당 평균 경비 (2인 기준)</span>
-            <span class="stat-value" style="color:var(--primary-600);">${formatAmount(perPerson, 'KRW')}</span>
-          </div>
-        </div>
-
-        <!-- 신혼여행 항목별 지출 분석 -->
-        <div class="expense-category-card">
-          <div style="font-size:0.9rem; font-weight:700; color:var(--text-main); display:flex; align-items:center; gap:6px;">
-            ${getIcon('CALCULATOR', { size: 18, color: 'var(--primary-600)' })}
-            <span>항목별 지출 분석 (예산 배분)</span>
+        <!-- 카테고리별 지출 배분 멀티 세그먼트 게이지 카드 -->
+        <div class="expense-gauge-card">
+          <div class="expense-card-header">
+            <div class="expense-card-title">
+              ${getIcon('CALCULATOR', { size: 16, color: 'var(--primary-600)' })}
+              <span>카테고리별 지출 배분</span>
+            </div>
+            <span class="expense-card-sub">${catEntries.length}개 카테고리</span>
           </div>
     `;
 
     if (catEntries.length === 0) {
       html += `
-        <div style="font-size:0.85rem; color:var(--text-muted); padding:6px 0;">
-          등록된 지출 내역이 없습니다.
-        </div>
+          <div style="font-size:0.85rem; color:var(--text-muted); padding:10px 0; text-align:center;">
+            등록된 지출 내역이 없습니다.
+          </div>
       `;
     } else {
+      // 멀티 세그먼트 프로그레스 게이지 바
+      html += '<div class="expense-multi-gauge-bar">';
+      catEntries.forEach(([catKey, catAmt]) => {
+        const pct = summary.totalInBase > 0 ? ((catAmt / summary.totalInBase) * 100).toFixed(1) : 0;
+        const cInfo = catMeta[catKey] || { label: catKey };
+        html += `<div class="expense-progress-segment seg-${catKey.toLowerCase()}" style="width: ${pct}%;" title="${cInfo.label}: ${pct}%"></div>`;
+      });
+      html += '</div>';
+
+      // 카테고리별 범례 및 세부 내역
+      html += '<div class="expense-cat-list">';
       catEntries.forEach(([catKey, catAmt]) => {
         const cInfo = catMeta[catKey] || { label: catKey, icon: 'INFO' };
         const percent = summary.totalInBase > 0 ? Math.round((catAmt / summary.totalInBase) * 100) : 0;
         html += `
-          <div class="expense-cat-row">
-            <div class="expense-cat-header">
-              <span class="expense-cat-name">
-                ${getIcon(cInfo.icon, { size: 14, color: 'var(--gray-600)' })}
-                ${cInfo.label} <strong style="font-size:0.75rem; color:var(--primary-600);">(${percent}%)</strong>
-              </span>
-              <span class="expense-cat-amount">${formatAmount(catAmt, 'KRW')}</span>
+          <div class="expense-cat-item">
+            <div class="expense-cat-info">
+              <span class="cat-dot dot-${catKey.toLowerCase()}"></span>
+              <span class="expense-cat-name">${cInfo.label}</span>
+              <span class="expense-cat-pct">${percent}%</span>
             </div>
-            <div class="expense-progress-bar">
-              <div class="expense-progress-fill" style="width: ${percent}%;"></div>
-            </div>
+            <span class="expense-cat-value">${formatAmount(catAmt, 'KRW')}</span>
           </div>
         `;
       });
+      html += '</div>';
     }
 
     html += `
         </div>
 
-        <!-- 공동 결제 현황 (통합 안내) -->
-        <div class="settlement-route-box">
-          <div class="settlement-route-title">
-            ${getIcon('CHECK', { size: 16, color: 'var(--primary-600)' })}
-            <span>공동 결제 현황</span>
+        <!-- 공동 결제 완결 상태를 보여주는 감성 안심 카드 -->
+        <div class="settlement-peace-card">
+          <div class="peace-icon-wrap">
+            ${getIcon('CHECK', { size: 20, color: 'var(--accent-emerald)' })}
           </div>
-          <div style="font-size:0.875rem; color:var(--text-main); line-height:1.5; padding:6px 0;">
-            모든 지출은 공동 결제(부부 공동 경비)로 처리되어 별도의 개인간 송금 정산이 필요 없습니다.
+          <div class="peace-content">
+            <div class="peace-title">정산 걱정 없는 편안한 여행</div>
+            <div class="peace-desc">모든 지출은 부부 공동 경비로 자동 통합되어 별도의 개인간 송금 정산 없이 투명하고 편리하게 관리됩니다.</div>
           </div>
         </div>
-      </div>
     `;
 
+    // 항목별 지출 랭킹 리스트 (TOP 5)
+    if (topCostItems.length > 0) {
+      html += `
+        <div class="expense-ranking-card">
+          <div class="expense-card-header">
+            <div class="expense-card-title">
+              ${getIcon('STAR', { size: 16, color: 'var(--accent-amber)' })}
+              <span>지출 상위 랭킹 TOP 5</span>
+            </div>
+            <span class="expense-card-sub">주요 예산 항목</span>
+          </div>
+          <div class="expense-ranking-list">
+      `;
+
+      topCostItems.forEach((item, idx) => {
+        const rank = idx + 1;
+        const catInfo = CATEGORIES[item.category] || { label: '기타' };
+        html += `
+          <div class="ranking-item" data-id="${escapeHtml(item.id)}" style="cursor:pointer;" title="해당 일정으로 이동">
+            <div class="ranking-rank rank-${rank}">${rank}</div>
+            <div class="ranking-info">
+              <div class="ranking-name">${escapeHtml(item.title || '일정')}</div>
+              <div class="ranking-meta">${escapeHtml(catInfo.label)} | Day ${item.day}</div>
+            </div>
+            <div class="ranking-cost">${formatAmount(item.cost, 'KRW')}</div>
+          </div>
+        `;
+      });
+
+      html += `
+          </div>
+        </div>
+      `;
+    }
+
+    html += '</div>';
     dom.panelContentArea.innerHTML = html;
+
+    // 랭킹 항목 클릭 시 해당 일정 선택 및 지도 이동
+    dom.panelContentArea.querySelectorAll('.ranking-item').forEach((row) => {
+      row.addEventListener('click', () => {
+        const id = row.dataset.id;
+        if (!id) return;
+        store.setSelectedItemId(id);
+        const targetItem = (trip.items || []).find((it) => it.id === id);
+        if (targetItem) {
+          if (Number(targetItem.day) !== store.getState().selectedDay) {
+            store.setSelectedDay(Number(targetItem.day));
+          }
+          mapManager.flyToItem(targetItem);
+        }
+      });
+    });
   }
 
   /**
