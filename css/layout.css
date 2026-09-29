@@ -416,7 +416,7 @@
     background-color: var(--bg-surface);
     border-radius: 20px 20px 0 0;
     box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.2) !important;
-    z-index: 9000 !important;
+    z-index: var(--z-bottomsheet) !important;
     transition: height var(--transition-slow), transform var(--transition-slow);
     will-change: height, transform;
     overflow: hidden;
@@ -525,7 +525,7 @@
     border-top: 1px solid rgba(0, 0, 0, 0.08);
     align-items: stretch;
     justify-content: space-around;
-    z-index: 9500 !important;
+    z-index: var(--z-bottom-nav) !important;
     box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08) !important;
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
@@ -748,5 +748,14 @@
     padding: 6px 6px;
     font-size: 0.75rem;
   }
+}
+
+/* 모달 오픈 시 배경 스크롤 차단 및 터치 간섭 방지 */
+body.modal-open {
+  overflow: hidden !important;
+}
+
+body.modal-open .mobile-bottom-nav {
+  pointer-events: none !important;
 }
 

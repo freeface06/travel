@@ -654,13 +654,19 @@
     dom.modalTitle.textContent = title;
     dom.modalContainer.innerHTML = contentHtml;
     dom.modalOverlay.classList.add('is-open');
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.classList.add('modal-open');
+    }
   }
 
   function closeModal() {
     dom.modalOverlay.classList.remove('is-open');
     dom.modalContainer.innerHTML = '';
     mapManager.setPinDropMode(false);
-    dom.btnPinDropToggle.classList.remove('active');
+    dom.btnPinDropToggle?.classList.remove('active');
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.classList.remove('modal-open');
+    }
   }
 
   /**

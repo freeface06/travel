@@ -78,18 +78,18 @@
   --transition-normal: 250ms ease;
   --transition-slow: 350ms cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* 레이아웃 계층 (Z-Index) - 지도(최대 1000) 위에 모든 앱 UI 노출 보장 */
+  /* 레이아웃 계층 (Z-Index) - 바텀시트 및 내비게이션 위로 모달 최상단 노출 보장 */
   --z-map: 1;
   --z-map-controls: 500;
   --z-panel: 1000;
   --z-header: 2000;
   --z-day-chips: 2100;
-  --z-bottomsheet: 3000;
-  --z-bottom-nav: 3500;
-  --z-dropdown: 4000;
-  --z-modal: 5000;
-  --z-lightbox: 6000;
-  --z-toast: 7000;
+  --z-bottomsheet: 8000;
+  --z-bottom-nav: 9000;
+  --z-dropdown: 9500;
+  --z-modal: 10000;
+  --z-lightbox: 11000;
+  --z-toast: 12000;
 
 
   /* 반응형 및 SafeArea 토큰 */
