@@ -5,6 +5,7 @@
  *         - InfoWindow/팝업 및 카드-마커 양방향 연동
  *         - 지도 직접 클릭 핀 드롭 모드
  *         - 100% 반응형 및 모바일 바텀시트 연동
+ *         - 시각적 +/- 줌 버튼 완전 제거 (핀치 줌 및 마우스 휠 줌 유지)
  * @agent  Gemini/manager-develop
  * @branch feat/mytriplog-core
  * @author @developer_name
@@ -250,7 +251,11 @@
     }
 
     /**
-     * Google Maps 초기화
+     * @intent Google Maps 초기화 (시각적 +/- 줌 컨트롤 비활성화, 제스처 줌 유지)
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
      */
     initGoogleMaps(container, initialCenter, initialZoom) {
       this.engine = 'google';
@@ -268,7 +273,7 @@
           center: centerLatLng,
           zoom: initialZoom,
           mapTypeId: google.maps.MapTypeId.ROADMAP,
-          zoomControl: true,
+          zoomControl: false,
           mapTypeControl: false,
           scaleControl: true,
           streetViewControl: false,
@@ -304,7 +309,11 @@
     }
 
     /**
-     * Leaflet 초기화 (무오류 안정 폴백)
+     * @intent Leaflet 초기화 (무오류 안정 폴백, +/- 줌 컨트롤 제거 및 핀치/휠 줌 유지)
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
      */
     initLeaflet(container, initialCenter, initialZoom) {
       this.engine = 'leaflet';
@@ -325,8 +334,6 @@
           maxZoom: 19,
           attribution: '&copy; OpenStreetMap'
         }).addTo(this.map);
-
-        L.control.zoom({ position: 'topleft' }).addTo(this.map);
 
         this.map.on('click', (e) => {
           if (!this.isPinDropActive) return;

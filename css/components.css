@@ -1774,3 +1774,9 @@
   overflow: auto !important;
 }
 
+/* 지도 줌(+/-) 컨트롤러 완전 숨김 (핀치 줌 및 마우스 휠 줌 활용) */
+.leaflet-control-zoom,
+.leaflet-top.leaflet-left .leaflet-control-zoom {
+  display: none !important;
+}
+
