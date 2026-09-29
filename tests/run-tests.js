@@ -27,6 +27,8 @@ const TripStore = require(path.join(__dirname, '../js/store.js'));
 const Icons = require(path.join(__dirname, '../js/icons.js'));
 const TripShare = require(path.join(__dirname, '../js/share.js'));
 const TripSupabase = require(path.join(__dirname, '../js/supabase.js'));
+global.TripSupabase = TripSupabase;
+global.TripStore = TripStore;
 
 let totalTests = 0;
 let passedTests = 0;
@@ -445,29 +447,34 @@ runTest('7-5. 여행 계획 삭제 (deleteTrip) 및 최소 1개 유지 방어 �
   // --------------------------------------------------------------------------
   console.log('\n--- [Suite 8: Supabase 연동 모듈 및 클라우드 동기화 엔진 검증] ---');
 
-  await runTest('8-1. TripSupabase 모듈 로드 및 초기 미설정 상태 검증', () => {
+  await runTest('8-1. TripSupabase 기본 내장 상수 및 초기 자동 설정(isConfigured = true) 검증', () => {
     const mgr = new TripSupabase.SupabaseClientManager();
     mgr.clearConfig();
-    assert.strictEqual(mgr.isConfigured(), false);
-    assert.strictEqual(mgr.getClient(), null);
+    // 기본 내장 상수가 존재하므로 별도 입력 없이도 언제나 true
+    assert.strictEqual(mgr.isConfigured(), true);
+    const config = mgr.getConfig();
+    assert.strictEqual(config.url, TripSupabase.DEFAULT_SUPABASE_URL);
+    assert.strictEqual(config.anonKey, TripSupabase.DEFAULT_SUPABASE_KEY);
+    assert.strictEqual(config.url, 'https://qmqklwelrsmlsrmtnsxt.supabase.co');
   });
 
-  await runTest('8-2. saveConfig, getConfig, clearConfig 설정 생명주기 검증', () => {
+  await runTest('8-2. 사용자 커스텀 설정 덮어쓰기 및 clearConfig 시 기본 내장값으로 복귀 검증', () => {
     const mgr = new TripSupabase.SupabaseClientManager();
-    const saved = mgr.saveConfig('https://myproject.supabase.co', 'anon-secret-key-12345');
-    assert.strictEqual(saved.url, 'https://myproject.supabase.co');
-    assert.strictEqual(saved.anonKey, 'anon-secret-key-12345');
+    const saved = mgr.saveConfig('https://custom-project.supabase.co', 'custom-anon-key-12345');
+    assert.strictEqual(saved.url, 'https://custom-project.supabase.co');
+    assert.strictEqual(saved.anonKey, 'custom-anon-key-12345');
     assert.strictEqual(mgr.isConfigured(), true);
 
     const config = mgr.getConfig();
-    assert.strictEqual(config.url, 'https://myproject.supabase.co');
-    assert.strictEqual(config.anonKey, 'anon-secret-key-12345');
+    assert.strictEqual(config.url, 'https://custom-project.supabase.co');
+    assert.strictEqual(config.anonKey, 'custom-anon-key-12345');
 
+    // clearConfig 호출 시 로컬스토리지 삭제 후 기본 내장 상수로 안전하게 복귀
     mgr.clearConfig();
-    assert.strictEqual(mgr.isConfigured(), false);
+    assert.strictEqual(mgr.isConfigured(), true);
     const cleared = mgr.getConfig();
-    assert.strictEqual(cleared.url, '');
-    assert.strictEqual(cleared.anonKey, '');
+    assert.strictEqual(cleared.url, TripSupabase.DEFAULT_SUPABASE_URL);
+    assert.strictEqual(cleared.anonKey, TripSupabase.DEFAULT_SUPABASE_KEY);
   });
 
   await runTest('8-3. getSetupSqlScript() 표준 SQL 스크립트 무결성 검증', () => {
@@ -639,7 +646,56 @@ runTest('7-5. 여행 계획 삭제 (deleteTrip) 및 최소 1개 유지 방어 �
     assert.strictEqual(foundCloudTrip.metadata.title, '클라우드 복원 여행 계획');
   });
 
-  await runTest('8-8. 엄격한 No-Emoji 원칙 검증 (Strict No-Emoji Policy)', () => {
+  await runTest('8-8. autoSyncTrip() 및 autoFetchAndRestore() 실시간 자동 동기화 헬퍼 검증', async () => {
+    const mgr = new TripSupabase.SupabaseClientManager();
+    const store = new TripStore.Store();
+    store.setSupabaseManager(mgr);
+
+    const recordedSyncStates = [];
+    mgr.onSyncStateChange((s) => {
+      recordedSyncStates.push(s.state);
+    });
+
+    const mockDb = new Map();
+    const mockClient = {
+      from: (tableName) => ({
+        select: () => ({
+          order: async () => ({
+            data: Array.from(mockDb.values()),
+            error: null
+          })
+        }),
+        upsert: async (record) => {
+          mockDb.set(record.id, record);
+          return { data: record, error: null };
+        }
+      })
+    };
+    mgr.setClient(mockClient);
+
+    // 1) autoFetchAndRestore 시 클라우드가 비어있으면 로컬 데이터를 클라우드로 Seed 백업
+    const seedResult = await mgr.autoFetchAndRestore(store);
+    assert.strictEqual(seedResult.action, 'seeded');
+    assert.ok(seedResult.count >= 1);
+    assert.strictEqual(mockDb.size >= 1, true);
+
+    // 2) autoSyncTrip 단일 여행 자동 동기화
+    const trip = store.getCurrentTrip();
+    const syncRes = await mgr.autoSyncTrip(trip);
+    assert.strictEqual(syncRes.ok, true);
+    assert.strictEqual(mgr.getSyncState().state, 'synced');
+
+    // 3) autoFetchAndRestore 시 클라우드에 데이터가 존재하면 imported 수행
+    const importResult = await mgr.autoFetchAndRestore(store);
+    assert.strictEqual(importResult.action, 'imported');
+    assert.ok(importResult.count >= 1);
+
+    // 동기화 상태 전이 확인
+    assert.ok(recordedSyncStates.includes('syncing'));
+    assert.ok(recordedSyncStates.includes('synced'));
+  });
+
+  await runTest('8-9. 엄격한 No-Emoji 원칙 검증 (Strict No-Emoji Policy)', () => {
     const targetFiles = [
       path.join(__dirname, '../js/supabase.js'),
       path.join(__dirname, '../js/store.js'),

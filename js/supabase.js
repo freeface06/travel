@@ -18,6 +18,10 @@
   const STORAGE_KEY_URL = 'mytriplog_supabase_url';
   const STORAGE_KEY_KEY = 'mytriplog_supabase_anon_key';
 
+  // 프로젝트 기본 내장 Supabase 인프라 연결 정보 (영구 무중단 클라우드 자동 동기화 SSOT)
+  const DEFAULT_SUPABASE_URL = 'https://qmqklwelrsmlsrmtnsxt.supabase.co';
+  const DEFAULT_SUPABASE_KEY = 'sb_publishable_Gz-4w0mexqsHUTaNl6AtDw_b9W1nddm';
+
   /**
    * @intent Base64 DataURL 문자열을 표준 Blob 객체로 변환
    * @agent  Gemini/manager-develop
@@ -77,10 +81,78 @@
   class SupabaseClientManager {
     constructor() {
       this.client = null;
+      this.syncState = 'synced'; // 'idle' | 'syncing' | 'synced' | 'error'
+      this.syncMessage = '클라우드 자동 저장됨';
+      this.stateListeners = [];
     }
 
     /**
-     * @intent 로컬스토리지에서 Supabase 연결 설정 로드
+     * @intent 동기화 상태 변경 구독 리스너 등록
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     * @param {function({ state: string, message: string }): void} listener 
+     * @returns {function(): void} 구독 해제 콜백
+     */
+    onSyncStateChange(listener) {
+      if (typeof listener === 'function') {
+        this.stateListeners.push(listener);
+        try {
+          listener({ state: this.syncState, message: this.syncMessage });
+        } catch (e) {
+          console.error('Initial sync state listener error:', e);
+        }
+      }
+      return () => {
+        this.stateListeners = this.stateListeners.filter((l) => l !== listener);
+      };
+    }
+
+    /**
+     * @intent 동기화 상태 갱신 및 구독자 전원 통지
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     * @param {'idle'|'syncing'|'synced'|'error'} state 
+     * @param {string} [message] 
+     */
+    setSyncState(state, message = '') {
+      this.syncState = state;
+      if (message) {
+        this.syncMessage = message;
+      } else if (state === 'syncing') {
+        this.syncMessage = '클라우드 동기화 중...';
+      } else if (state === 'synced') {
+        this.syncMessage = '클라우드 자동 저장됨';
+      } else if (state === 'error') {
+        this.syncMessage = '동기화 일시 오류 (오프라인 모드)';
+      }
+      const payload = { state: this.syncState, message: this.syncMessage };
+      this.stateListeners.forEach((fn) => {
+        try {
+          fn(payload);
+        } catch (err) {
+          console.error('Error in syncState listener:', err);
+        }
+      });
+    }
+
+    /**
+     * @intent 현재 동기화 상태 반환
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     * @returns {{ state: string, message: string }}
+     */
+    getSyncState() {
+      return { state: this.syncState, message: this.syncMessage };
+    }
+
+    /**
+     * @intent 로컬스토리지 또는 프로젝트 기본 내장 설정에서 Supabase 연결 설정 로드
      * @agent  Gemini/manager-develop
      * @branch feat/mytriplog-core
      * @author @developer_name
@@ -88,12 +160,15 @@
      * @returns {{ url: string, anonKey: string }}
      */
     getConfig() {
-      if (typeof localStorage === 'undefined') {
-        return { url: '', anonKey: '' };
+      let userUrl = '';
+      let userKey = '';
+      if (typeof localStorage !== 'undefined') {
+        userUrl = (localStorage.getItem(STORAGE_KEY_URL) || '').trim();
+        userKey = (localStorage.getItem(STORAGE_KEY_KEY) || '').trim();
       }
       return {
-        url: (localStorage.getItem(STORAGE_KEY_URL) || '').trim(),
-        anonKey: (localStorage.getItem(STORAGE_KEY_KEY) || '').trim()
+        url: userUrl || DEFAULT_SUPABASE_URL,
+        anonKey: userKey || DEFAULT_SUPABASE_KEY
       };
     }
 
@@ -139,7 +214,7 @@
     }
 
     /**
-     * @intent 유효한 Supabase 설정이 구성되어 있는지 확인
+     * @intent 유효한 Supabase 설정이 구성되어 있는지 확인 (기본 내장 키 포함)
      * @agent  Gemini/manager-develop
      * @branch feat/mytriplog-core
      * @author @developer_name
@@ -149,6 +224,77 @@
     isConfigured() {
       const { url, anonKey } = this.getConfig();
       return Boolean(url && anonKey && url.startsWith('http'));
+    }
+
+    /**
+     * @intent 단일 여행 계획을 백그라운드로 안전하게 클라우드 동기화하고 상태 배지 통지
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     * @param {object} trip 
+     * @returns {Promise<{ ok: boolean, error?: string, data?: any }>}
+     */
+    async autoSyncTrip(trip) {
+      if (!trip || !trip.metadata || !trip.metadata.id) {
+        return { ok: false, error: '유효한 여행 데이터가 아닙니다.' };
+      }
+      this.setSyncState('syncing', '클라우드 자동 저장 중...');
+      try {
+        const result = await this.syncTrip(trip);
+        if (result && result.ok) {
+          this.setSyncState('synced', '클라우드 자동 저장됨');
+        } else {
+          this.setSyncState('error', '클라우드 동기화 실패 (로컬 안전 보관)');
+        }
+        return result;
+      } catch (err) {
+        this.setSyncState('error', '클라우드 연결 오류 (로컬 안전 보관)');
+        return { ok: false, error: err.message };
+      }
+    }
+
+    /**
+     * @intent 앱 구동 시 클라우드에서 여행 데이터를 자동 조회하여 복원하거나 초기 Seed 백업 실행
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     * @param {object} storeInstance - TripStore 인스턴스
+     * @returns {Promise<{ action: string, count: number, trips?: Array<object>, error?: string }>}
+     */
+    async autoFetchAndRestore(storeInstance) {
+      if (!this.isConfigured()) {
+        return { action: 'unconfigured', count: 0 };
+      }
+
+      this.setSyncState('syncing', '클라우드 동기화 확인 중...');
+      try {
+        const cloudTrips = await this.fetchTrips();
+        if (Array.isArray(cloudTrips) && cloudTrips.length > 0) {
+          if (storeInstance && typeof storeInstance.importFromCloud === 'function') {
+            await storeInstance.importFromCloud();
+          }
+          this.setSyncState('synced', '클라우드 데이터 자동 복원됨');
+          return { action: 'imported', count: cloudTrips.length, trips: cloudTrips };
+        } else {
+          // 클라우드가 비어있고 로컬에 기존 여행 계획이 있다면 클라우드로 즉시 1회 자동 업로드(Seed)
+          if (storeInstance && typeof storeInstance.getTrips === 'function') {
+            const localTrips = storeInstance.getTrips();
+            if (Array.isArray(localTrips) && localTrips.length > 0 && typeof storeInstance.syncAllToCloud === 'function') {
+              const count = await storeInstance.syncAllToCloud();
+              this.setSyncState('synced', '클라우드 초기 백업 완료');
+              return { action: 'seeded', count };
+            }
+          }
+          this.setSyncState('synced', '클라우드 연동 준비 완료');
+          return { action: 'idle', count: 0 };
+        }
+      } catch (err) {
+        console.warn('autoFetchAndRestore exception:', err);
+        this.setSyncState('error', '동기화 일시 오류 (오프라인 모드)');
+        return { action: 'error', error: err.message, count: 0 };
+      }
     }
 
     /**
@@ -422,6 +568,8 @@
   return {
     SupabaseClientManager,
     supabaseManager,
+    DEFAULT_SUPABASE_URL,
+    DEFAULT_SUPABASE_KEY,
     STORAGE_KEY_URL,
     STORAGE_KEY_KEY,
     base64ToBlob

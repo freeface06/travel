@@ -25,6 +25,7 @@
     tripPeriod: document.getElementById('trip-period'),
     btnManageTrips: document.getElementById('btn-manage-trips'),
     btnOpenCloudSync: document.getElementById('btn-open-cloud-sync'),
+    cloudSyncBadgeText: document.getElementById('cloud-sync-badge-text'),
     btnCopyShareLink: document.getElementById('btn-copy-share-link'),
     btnEditTrip: document.getElementById('btn-edit-trip'),
 
@@ -1661,6 +1662,65 @@
   }
 
   /**
+   * @intent 상단 헤더의 실시간 클라우드 자동 동기화 배지 UI 갱신 (Strict No-Emoji 원칙 준수)
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   * @param {'idle'|'syncing'|'synced'|'error'} state 
+   * @param {string} [customMessage] 
+   */
+  function updateCloudBadgeUI(state, customMessage) {
+    const badge = dom.btnOpenCloudSync;
+    const textEl = dom.cloudSyncBadgeText;
+    if (!badge) return;
+
+    badge.classList.remove('syncing', 'synced', 'error', 'idle');
+    badge.classList.add(state || 'synced');
+
+    let labelText = customMessage || '';
+    if (!labelText) {
+      if (state === 'syncing') labelText = '동기화 중...';
+      else if (state === 'synced') labelText = '클라우드 자동 저장됨';
+      else if (state === 'error') labelText = '로컬 보관 모드';
+      else labelText = '클라우드 대기';
+    }
+
+    if (textEl) textEl.textContent = labelText;
+    badge.setAttribute('title', `Supabase 클라우드: ${labelText} (클릭 시 상세 모달)`);
+  }
+
+  /**
+   * @intent 앱 구동 시 백그라운드로 클라우드 데이터 확인 및 자동 복원/초기 백업 동기화
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   */
+  async function initCloudAutoSync() {
+    const mgr = (typeof TripSupabase !== 'undefined' ? TripSupabase.supabaseManager : null);
+    if (!mgr) return;
+
+    // 동기화 상태 리스너 등록하여 헤더 배지와 자동 연동
+    mgr.onSyncStateChange(({ state, message }) => {
+      updateCloudBadgeUI(state, message);
+    });
+
+    try {
+      updateCloudBadgeUI('syncing', '동기화 확인 중...');
+      const result = await mgr.autoFetchAndRestore(store);
+      if (result.action === 'imported') {
+        showToast(`클라우드에서 ${result.count}개의 여행 계획을 자동으로 불러왔습니다.`);
+      } else if (result.action === 'seeded') {
+        showToast('현재 여행 계획이 클라우드에 안전하게 자동 백업되었습니다.');
+      }
+    } catch (err) {
+      console.warn('initCloudAutoSync background error:', err);
+      updateCloudBadgeUI('error', '로컬 보관 모드');
+    }
+  }
+
+  /**
    * @intent Supabase 클라우드 PostgreSQL DB 및 스토리지 연동 설정 모달
    * @agent  Gemini/manager-develop
    * @branch feat/mytriplog-core
@@ -2291,6 +2351,9 @@
       const item = (trip.items || []).find((it) => it.id === itemId);
       if (item) openItemEditModal(item);
     });
+
+    // 16. 기본 내장 Supabase 클라우드 양방향 완전 자동 동기화 백그라운드 가동
+    initCloudAutoSync();
   }
 
   // DOM 로드 완료 시 구동

@@ -383,7 +383,11 @@
       try {
         const mgr = this.getSupabaseManager();
         if (mgr && typeof mgr.isConfigured === 'function' && mgr.isConfigured() && this.state.trip) {
-          await mgr.syncTrip(this.state.trip);
+          if (typeof mgr.autoSyncTrip === 'function') {
+            await mgr.autoSyncTrip(this.state.trip);
+          } else {
+            await mgr.syncTrip(this.state.trip);
+          }
           return true;
         }
       } catch (err) {
