@@ -77,6 +77,15 @@
   color: var(--gray-900);
 }
 
+.btn:disabled,
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-outline:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  pointer-events: none;
+}
+
 /* ==========================================================================
    타임라인 카드 및 아이템
    ========================================================================== */

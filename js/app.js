@@ -1505,6 +1505,13 @@
     });
 
     // 4. 지도 핀 드롭 리스너 연동
+    /**
+     * @intent 지도 핀 클릭 시 즉각 좌표 할당 및 2.5초 타임아웃 기반 비동기 역지오코딩 처리
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     */
     mapManager.setPinDropListener(async (lat, lng) => {
       // 핀 마커 표시
       mapManager.setPinDropPreview(lat, lng);
@@ -1512,15 +1519,29 @@
       // 위치 선택 바 UI 활성화 여부 확인
       const isPickerActive = dom.pinPickerBar && !dom.pinPickerBar.classList.contains('hidden');
       if (isPickerActive) {
+        // 지도를 클릭하는 순간(0초), 역지오코딩 완료를 대기하지 않고 즉시 기본 좌표로 activePickerCoord를 먼저 생성
+        const fallbackCoordText = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        activePickerCoord = {
+          lat,
+          lng,
+          name: fallbackCoordText,
+          address: fallbackCoordText
+        };
+        if (dom.btnPinPickerConfirm) {
+          dom.btnPinPickerConfirm.disabled = false;
+        }
         if (dom.pinPickerAddress) {
-          dom.pinPickerAddress.textContent = '주소 확인 중...';
+          dom.pinPickerAddress.textContent = `주소 확인 중... (${fallbackCoordText})`;
         }
 
         try {
-          const place = await TripGeocoder.reverseGeocode(lat, lng);
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('timeout')), 2500);
+          });
+          const place = await Promise.race([TripGeocoder.reverseGeocode(lat, lng), timeoutPromise]);
           const placeName = (place && place.name) || '';
           const placeAddress = (place && (place.address || place.displayName)) || '';
-          const displayAddress = placeName || placeAddress || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+          const displayAddress = placeName || placeAddress || fallbackCoordText;
 
           if (dom.pinPickerAddress) {
             dom.pinPickerAddress.textContent = displayAddress;
@@ -1528,22 +1549,21 @@
           activePickerCoord = {
             lat,
             lng,
-            name: placeName,
-            address: placeAddress
+            name: placeName || fallbackCoordText,
+            address: placeAddress || fallbackCoordText
           };
           if (dom.btnPinPickerConfirm) {
             dom.btnPinPickerConfirm.disabled = false;
           }
         } catch (err) {
-          const fallback = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
           if (dom.pinPickerAddress) {
-            dom.pinPickerAddress.textContent = fallback;
+            dom.pinPickerAddress.textContent = fallbackCoordText;
           }
           activePickerCoord = {
             lat,
             lng,
-            name: fallback,
-            address: fallback
+            name: fallbackCoordText,
+            address: fallbackCoordText
           };
           if (dom.btnPinPickerConfirm) {
             dom.btnPinPickerConfirm.disabled = false;
@@ -1556,14 +1576,20 @@
         if (latInput && lngInput) {
           latInput.value = lat.toFixed(5);
           lngInput.value = lng.toFixed(5);
+          latInput.dispatchEvent(new Event('input', { bubbles: true }));
+          lngInput.dispatchEvent(new Event('input', { bubbles: true }));
         }
         showToast(`핀 좌표 선택 완료: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
 
         try {
-          const place = await TripGeocoder.reverseGeocode(lat, lng);
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('timeout')), 2500);
+          });
+          const place = await Promise.race([TripGeocoder.reverseGeocode(lat, lng), timeoutPromise]);
           const searchInput = document.getElementById('place-search-input');
-          if (searchInput && place.name) {
+          if (searchInput && place && place.name) {
             searchInput.value = place.name;
+            searchInput.dispatchEvent(new Event('input', { bubbles: true }));
           }
         } catch (err) {
           // 무시
@@ -1572,8 +1598,18 @@
     });
 
     // 4-1. 지도 핀 위치 선택 완료 버튼 (#btn-pin-picker-confirm)
+    /**
+     * @intent 핀 선택 완료 시 폼 필드 주입 및 모달 팝업 복귀 확실성 보장
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     */
     dom.btnPinPickerConfirm?.addEventListener('click', () => {
-      if (!activePickerCoord) return;
+      if (!activePickerCoord) {
+        showToast('선택된 핀 위치가 없습니다.');
+        return;
+      }
 
       const { lat, lng, name, address } = activePickerCoord;
       const latInput = document.getElementById('item-lat');
@@ -1581,13 +1617,23 @@
       const searchInput = document.getElementById('place-search-input');
       const titleInput = document.getElementById('item-title');
 
-      if (latInput) latInput.value = lat.toFixed(5);
-      if (lngInput) lngInput.value = lng.toFixed(5);
+      if (latInput) {
+        latInput.value = lat.toFixed(5);
+        latInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (lngInput) {
+        lngInput.value = lng.toFixed(5);
+        lngInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
 
       const placeLabel = name || address || '';
-      if (searchInput) searchInput.value = placeLabel;
+      if (searchInput) {
+        searchInput.value = placeLabel;
+        searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
       if (titleInput && !titleInput.value.trim()) {
         titleInput.value = placeLabel;
+        titleInput.dispatchEvent(new Event('input', { bubbles: true }));
       }
 
       // 카테고리별 명칭 필드가 비어있다면 자동 입력:
@@ -1599,14 +1645,19 @@
         const fieldEl = document.getElementById(fieldId);
         if (fieldEl && !fieldEl.value.trim()) {
           fieldEl.value = placeLabel;
+          fieldEl.dispatchEvent(new Event('input', { bubbles: true }));
         }
       });
 
-      // 핀 모드 종료
+      // 핀 모드 종료 및 모달 복귀 확실성 보장
       mapManager.setPinDropMode(false);
       dom.btnPinDropToggle?.classList.remove('active');
       dom.pinPickerBar?.classList.add('hidden');
       dom.modalOverlay.classList.remove('picker-mode-active');
+      dom.modalOverlay.classList.add('is-open');
+      if (typeof document !== 'undefined' && document.body) {
+        document.body.classList.add('modal-open');
+      }
 
       if (window.innerWidth <= 900) {
         setBottomSheetState(previousSheetStateBeforePicker || 'half');
@@ -1616,11 +1667,22 @@
     });
 
     // 4-2. 지도 핀 위치 선택 취소 버튼 (#btn-pin-picker-cancel)
+    /**
+     * @intent 핀 선택 취소 시 모달 복귀 확실성 보장
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     */
     dom.btnPinPickerCancel?.addEventListener('click', () => {
       mapManager.setPinDropMode(false);
       dom.btnPinDropToggle?.classList.remove('active');
       dom.pinPickerBar?.classList.add('hidden');
       dom.modalOverlay.classList.remove('picker-mode-active');
+      dom.modalOverlay.classList.add('is-open');
+      if (typeof document !== 'undefined' && document.body) {
+        document.body.classList.add('modal-open');
+      }
 
       if (window.innerWidth <= 900) {
         setBottomSheetState(previousSheetStateBeforePicker || 'half');
