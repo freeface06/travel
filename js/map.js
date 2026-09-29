@@ -36,6 +36,16 @@
     return DAY_COLORS[idx];
   }
 
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
   /**
    * 커스텀 번호 SVG 마커 생성 (공통)
    */
@@ -436,7 +446,7 @@
             if (this.infoWindow) {
               const div = document.createElement('div');
               div.style.padding = '4px 6px';
-              div.innerHTML = `<strong>[${order}] ${item.title || '일정'}</strong><div style="font-size:12px;color:#666;">${item.time || ''}</div>`;
+              div.innerHTML = `<strong>[${escapeHtml(order)}] ${escapeHtml(item.title || '일정')}</strong><div style="font-size:12px;color:#666;">${escapeHtml(item.time || '')}</div>`;
               this.infoWindow.setContent(div);
               this.infoWindow.open(this.map, marker);
             }
@@ -456,7 +466,7 @@
           });
 
           const marker = L.marker([lat, lng], { icon, zIndexOffset: isSelected ? 1000 : order * 10 }).addTo(this.map);
-          marker.bindPopup(`<strong>[${order}] ${item.title || '일정'}</strong><div>${item.time || ''}</div>`);
+          marker.bindPopup(`<strong>[${escapeHtml(order)}] ${escapeHtml(item.title || '일정')}</strong><div>${escapeHtml(item.time || '')}</div>`);
           marker.on('click', () => {
             if (this.onMarkerClickListener) this.onMarkerClickListener(item.id);
           });

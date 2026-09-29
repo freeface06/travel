@@ -29,10 +29,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js" crossorigin=""></script>
 
   <!-- 스타일시트 (캐시 버스팅 적용) -->
-  <link rel="stylesheet" href="css/reset.css?v=20260929_1531" />
-  <link rel="stylesheet" href="css/variables.css?v=20260929_1531" />
-  <link rel="stylesheet" href="css/layout.css?v=20260929_1531" />
-  <link rel="stylesheet" href="css/components.css?v=20260929_1531" />
+  <link rel="stylesheet" href="css/reset.css?v=20260929_1537" />
+  <link rel="stylesheet" href="css/variables.css?v=20260929_1537" />
+  <link rel="stylesheet" href="css/layout.css?v=20260929_1537" />
+  <link rel="stylesheet" href="css/components.css?v=20260929_1537" />
 </head>
 <body>
   <div class="app-container">
@@ -202,6 +202,18 @@
     </nav>
   </div>
 
+  <!-- 지도 핀 위치 선택 오버레이 바 -->
+  <div id="pin-picker-bar" class="pin-picker-bar hidden">
+    <div class="pin-picker-info">
+      <span class="pin-picker-guide">지도에서 원하는 위치를 클릭하세요</span>
+      <span class="pin-picker-address" id="pin-picker-address">위치를 선택해 주세요</span>
+    </div>
+    <div class="pin-picker-actions">
+      <button type="button" id="btn-pin-picker-cancel" class="btn btn-secondary btn-sm">취소</button>
+      <button type="button" id="btn-pin-picker-confirm" class="btn btn-primary btn-sm" disabled>선택 완료</button>
+    </div>
+  </div>
+
   <!-- 공통 모달 대화상자 -->
   <div class="modal-overlay" id="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-dialog">
@@ -235,14 +247,14 @@
   <div class="toast-container" id="toast-container"></div>
 
   <!-- 스크립트 모듈 로드 (캐시 버스팅 적용) -->
-  <script src="js/icons.js?v=20260929_1531"></script>
-  <script src="js/db.js?v=20260929_1531"></script>
-  <script src="js/expense.js?v=20260929_1531"></script>
-  <script src="js/store.js?v=20260929_1531"></script>
-  <script src="js/geocoder.js?v=20260929_1531"></script>
-  <script src="js/map.js?v=20260929_1531"></script>
-  <script src="js/forms.js?v=20260929_1531"></script>
-  <script src="js/share.js?v=20260929_1531"></script>
-  <script src="js/app.js?v=20260929_1531"></script>
+  <script src="js/icons.js?v=20260929_1537"></script>
+  <script src="js/db.js?v=20260929_1537"></script>
+  <script src="js/expense.js?v=20260929_1537"></script>
+  <script src="js/store.js?v=20260929_1537"></script>
+  <script src="js/geocoder.js?v=20260929_1537"></script>
+  <script src="js/map.js?v=20260929_1537"></script>
+  <script src="js/forms.js?v=20260929_1537"></script>
+  <script src="js/share.js?v=20260929_1537"></script>
+  <script src="js/app.js?v=20260929_1537"></script>
 </body>
 </html>

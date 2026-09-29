@@ -1,5 +1,5 @@
 /**
- * @intent 메인 애플리케이션 진입점 및 전역 이벤트 오케스트레이터
+ * @intent 메인 애플리케이션 진입점 및 전역 이벤트 오케스트레이터 (지도 핀 피커 UX 연동)
  * @agent  Gemini/manager-develop
  * @branch feat/mytriplog-core
  * @author @developer_name
@@ -48,6 +48,12 @@
     btnPinDropToggle: document.getElementById('btn-pin-drop-toggle'),
     btnAddItemFloating: document.getElementById('btn-add-item-floating'),
 
+    // 지도 핀 위치 선택 플로팅 바 (Pin Picker Bar)
+    pinPickerBar: document.getElementById('pin-picker-bar'),
+    pinPickerAddress: document.getElementById('pin-picker-address'),
+    btnPinPickerCancel: document.getElementById('btn-pin-picker-cancel'),
+    btnPinPickerConfirm: document.getElementById('btn-pin-picker-confirm'),
+
     // 모달 및 오버레이
     modalOverlay: document.getElementById('modal-overlay'),
     modalTitle: document.getElementById('modal-title'),
@@ -65,6 +71,8 @@
 
   // 모바일 바텀시트 상태: 'hidden', 'peek' (60px), 'half' (52vh), 'full' (전체)
   let currentSheetState = 'half';
+  let previousSheetStateBeforePicker = 'half';
+  let activePickerCoord = null;
 
   /**
    * 모바일 하단 네비게이션 활성 탭 UI 동기화
@@ -660,10 +668,12 @@
   }
 
   function closeModal() {
-    dom.modalOverlay.classList.remove('is-open');
+    dom.modalOverlay.classList.remove('is-open', 'picker-mode-active');
     dom.modalContainer.innerHTML = '';
     mapManager.setPinDropMode(false);
     dom.btnPinDropToggle?.classList.remove('active');
+    dom.pinPickerBar?.classList.add('hidden');
+    activePickerCoord = null;
     if (typeof document !== 'undefined' && document.body) {
       document.body.classList.remove('modal-open');
     }
@@ -762,11 +772,28 @@
       }
     });
 
-    // 지도 핀 드롭 버튼 클릭
+    // 지도 핀 드롭 버튼 클릭 (지도 핀 위치 선택 모드 진입)
     const pickOnMapBtn = document.getElementById('btn-pick-on-map');
     pickOnMapBtn?.addEventListener('click', () => {
+      dom.modalOverlay.classList.add('picker-mode-active');
+      previousSheetStateBeforePicker = currentSheetState;
+      if (window.innerWidth <= 900) {
+        syncMobileNavActiveState('map');
+        setBottomSheetState('hidden');
+      }
+      mapManager.invalidateSize();
+
+      dom.pinPickerBar?.classList.remove('hidden');
+      if (dom.pinPickerAddress) {
+        dom.pinPickerAddress.textContent = '위치를 선택해 주세요';
+      }
+      if (dom.btnPinPickerConfirm) {
+        dom.btnPinPickerConfirm.disabled = true;
+      }
       mapManager.setPinDropMode(true);
-      dom.btnPinDropToggle.classList.add('active');
+      dom.btnPinDropToggle?.classList.add('active');
+      activePickerCoord = null;
+
       showToast('지도를 클릭하여 위치를 지정해 주세요.');
     });
 
@@ -956,24 +983,127 @@
 
     // 4. 지도 핀 드롭 리스너 연동
     mapManager.setPinDropListener(async (lat, lng) => {
+      // 핀 마커 표시
+      mapManager.setPinDropPreview(lat, lng);
+
+      // 위치 선택 바 UI 활성화 여부 확인
+      const isPickerActive = dom.pinPickerBar && !dom.pinPickerBar.classList.contains('hidden');
+      if (isPickerActive) {
+        if (dom.pinPickerAddress) {
+          dom.pinPickerAddress.textContent = '주소 확인 중...';
+        }
+
+        try {
+          const place = await TripGeocoder.reverseGeocode(lat, lng);
+          const placeName = (place && place.name) || '';
+          const placeAddress = (place && (place.address || place.displayName)) || '';
+          const displayAddress = placeName || placeAddress || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+
+          if (dom.pinPickerAddress) {
+            dom.pinPickerAddress.textContent = displayAddress;
+          }
+          activePickerCoord = {
+            lat,
+            lng,
+            name: placeName,
+            address: placeAddress
+          };
+          if (dom.btnPinPickerConfirm) {
+            dom.btnPinPickerConfirm.disabled = false;
+          }
+        } catch (err) {
+          const fallback = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+          if (dom.pinPickerAddress) {
+            dom.pinPickerAddress.textContent = fallback;
+          }
+          activePickerCoord = {
+            lat,
+            lng,
+            name: fallback,
+            address: fallback
+          };
+          if (dom.btnPinPickerConfirm) {
+            dom.btnPinPickerConfirm.disabled = false;
+          }
+        }
+      } else {
+        // 일반 지도 핀 드롭 모드
+        const latInput = document.getElementById('item-lat');
+        const lngInput = document.getElementById('item-lng');
+        if (latInput && lngInput) {
+          latInput.value = lat.toFixed(5);
+          lngInput.value = lng.toFixed(5);
+        }
+        showToast(`핀 좌표 선택 완료: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+
+        try {
+          const place = await TripGeocoder.reverseGeocode(lat, lng);
+          const searchInput = document.getElementById('place-search-input');
+          if (searchInput && place.name) {
+            searchInput.value = place.name;
+          }
+        } catch (err) {
+          // 무시
+        }
+      }
+    });
+
+    // 4-1. 지도 핀 위치 선택 완료 버튼 (#btn-pin-picker-confirm)
+    dom.btnPinPickerConfirm?.addEventListener('click', () => {
+      if (!activePickerCoord) return;
+
+      const { lat, lng, name, address } = activePickerCoord;
       const latInput = document.getElementById('item-lat');
       const lngInput = document.getElementById('item-lng');
-      if (latInput && lngInput) {
-        latInput.value = lat.toFixed(5);
-        lngInput.value = lng.toFixed(5);
-      }
-      showToast(`핀 좌표 선택 완료: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+      const searchInput = document.getElementById('place-search-input');
+      const titleInput = document.getElementById('item-title');
 
-      // 역지오코딩 시도
-      try {
-        const place = await TripGeocoder.reverseGeocode(lat, lng);
-        const searchInput = document.getElementById('place-search-input');
-        if (searchInput && place.name) {
-          searchInput.value = place.name;
-        }
-      } catch (err) {
-        // 무시
+      if (latInput) latInput.value = lat.toFixed(5);
+      if (lngInput) lngInput.value = lng.toFixed(5);
+
+      const placeLabel = name || address || '';
+      if (searchInput) searchInput.value = placeLabel;
+      if (titleInput && !titleInput.value.trim()) {
+        titleInput.value = placeLabel;
       }
+
+      // 카테고리별 명칭 필드가 비어있다면 자동 입력:
+      // 숙소(HOTEL): #hotel-name
+      // 명소(ATTRACTION): #attraction-name
+      // 식당(DINING): #dining-name
+      // 공항(AIRPORT): #airport-name
+      ['hotel-name', 'attraction-name', 'dining-name', 'airport-name'].forEach((fieldId) => {
+        const fieldEl = document.getElementById(fieldId);
+        if (fieldEl && !fieldEl.value.trim()) {
+          fieldEl.value = placeLabel;
+        }
+      });
+
+      // 핀 모드 종료
+      mapManager.setPinDropMode(false);
+      dom.btnPinDropToggle?.classList.remove('active');
+      dom.pinPickerBar?.classList.add('hidden');
+      dom.modalOverlay.classList.remove('picker-mode-active');
+
+      if (window.innerWidth <= 900) {
+        setBottomSheetState(previousSheetStateBeforePicker || 'half');
+      }
+
+      showToast('선택한 위치가 입력되었습니다.');
+    });
+
+    // 4-2. 지도 핀 위치 선택 취소 버튼 (#btn-pin-picker-cancel)
+    dom.btnPinPickerCancel?.addEventListener('click', () => {
+      mapManager.setPinDropMode(false);
+      dom.btnPinDropToggle?.classList.remove('active');
+      dom.pinPickerBar?.classList.add('hidden');
+      dom.modalOverlay.classList.remove('picker-mode-active');
+
+      if (window.innerWidth <= 900) {
+        setBottomSheetState(previousSheetStateBeforePicker || 'half');
+      }
+
+      showToast('위치 선택을 취소했습니다.');
     });
 
     // 5. 플로팅 핀 드롭 토글 버튼

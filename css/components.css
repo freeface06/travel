@@ -459,6 +459,65 @@
   pointer-events: auto;
 }
 
+.modal-overlay.picker-mode-active {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   지도 핀 위치 선택 플로팅 배너 UI (Pin Picker Bar)
+   ========================================================================== */
+.pin-picker-bar {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1500;
+  z-index: 10500;
+  width: calc(100% - 32px);
+  max-width: 520px;
+  background-color: #ffffff;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 10px 16px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  transition: all var(--transition-normal);
+}
+
+.pin-picker-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pin-picker-guide {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--primary-600);
+}
+
+.pin-picker-address {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--gray-800);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.pin-picker-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .modal-dialog {
   background-color: #ffffff;
   border-radius: var(--radius-lg);
