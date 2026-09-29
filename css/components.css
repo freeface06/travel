@@ -2184,3 +2184,170 @@
   }
 }
 
+/* ==========================================================================
+   헤더 메뉴 및 드롭다운 메뉴 (단일 메뉴 통합)
+   ========================================================================== */
+
+/**
+ * @intent 헤더 단일 더보기 메뉴 토글 버튼 및 미니멀 드롭다운 메뉴 스타일링
+ * @agent  Gemini/manager-develop
+ * @branch feat/mytriplog-core
+ * @author @developer_name
+ * @date   2026-09-29
+ */
+.btn-header-menu {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  background-color: var(--bg-surface);
+  color: var(--gray-700);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-xs);
+  flex-shrink: 0;
+}
+
+.btn-header-menu svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+.btn-header-menu:hover {
+  background-color: var(--gray-100);
+  color: var(--primary-600);
+  border-color: var(--primary-300);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-header-menu:active {
+  transform: scale(0.94);
+  background-color: var(--gray-200);
+}
+
+/* 헤더 드롭다운 메뉴 컨테이너 */
+.header-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 220px;
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  padding: 6px;
+  z-index: 1000;
+  animation: dropdownFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.header-dropdown-menu.hidden {
+  display: none;
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dropdown-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  color: var(--gray-700);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+}
+
+.dropdown-menu-item svg {
+  flex-shrink: 0;
+  fill: currentColor;
+}
+
+.dropdown-menu-item:hover {
+  background: var(--gray-50);
+  color: var(--primary-600);
+}
+
+.dropdown-menu-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 6px 0;
+}
+
+/* 클라우드 메뉴 항목 스타일: 2줄 텍스트 + 녹색 펄스 점 */
+.dropdown-menu-cloud {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cloud-menu-icon-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.cloud-menu-icon-wrap svg {
+  color: var(--primary-600);
+}
+
+.cloud-menu-icon-wrap .sync-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #10b981;
+  box-shadow: 0 0 0 2px #ffffff;
+}
+
+.cloud-menu-icon-wrap .sync-dot.active {
+  animation: pulse-sync 1.5s infinite ease-in-out;
+}
+
+.cloud-menu-icon-wrap .sync-dot.error {
+  background-color: #ef4444;
+  animation: none;
+}
+
+.cloud-menu-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cloud-menu-text span {
+  font-weight: 600;
+  font-size: 0.86rem;
+  line-height: 1.2;
+}
+
+.cloud-menu-text small {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  line-height: 1.2;
+}
+

@@ -84,6 +84,7 @@
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  position: relative;
 }
 
 /* 헤더 액션 버튼 (데스크톱 컴팩트 캡슐 / 모바일 원형 아이콘) */

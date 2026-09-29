@@ -23,6 +23,14 @@
     brandInfo: document.getElementById('brand-info'),
     tripTitle: document.getElementById('trip-title'),
     tripPeriod: document.getElementById('trip-period'),
+    btnHeaderMenu: document.getElementById('btn-header-menu'),
+    headerDropdownMenu: document.getElementById('header-dropdown-menu'),
+    btnMenuEditTrip: document.getElementById('btn-menu-edit-trip'),
+    btnMenuManageTrips: document.getElementById('btn-menu-manage-trips'),
+    btnMenuCopyShare: document.getElementById('btn-menu-copy-share'),
+    btnMenuCloudSync: document.getElementById('btn-menu-cloud-sync'),
+    headerMenuCloudStatus: document.getElementById('header-menu-cloud-status'),
+    // 기존 호환용 요소 (선택적 참조)
     btnManageTrips: document.getElementById('btn-manage-trips'),
     btnOpenCloudSync: document.getElementById('btn-open-cloud-sync'),
     cloudSyncBadgeText: document.getElementById('cloud-sync-badge-text'),
@@ -1278,6 +1286,17 @@
   }
 
   /**
+   * @intent 여행 정보 및 설정 모달 오픈 별칭 함수 (openTripMetaModal 위임)
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   */
+  function openTripSettingsModal() {
+    openTripMetaModal();
+  }
+
+  /**
    * @intent 여행 기간 포맷팅 (박/일수 계산)
    * @agent  Gemini/manager-develop
    * @branch feat/mytriplog-core
@@ -1684,7 +1703,42 @@
   }
 
   /**
-   * @intent 상단 헤더의 실시간 클라우드 자동 동기화 배지 UI 갱신 (Strict No-Emoji 원칙 준수)
+   * @intent 헤더 드롭다운 메뉴 닫기 유틸리티
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   */
+  function closeHeaderMenu() {
+    const menu = document.getElementById('header-dropdown-menu') || dom.headerDropdownMenu;
+    const btn = document.getElementById('btn-header-menu') || dom.btnHeaderMenu;
+    if (menu) menu.classList.add('hidden');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  }
+
+  /**
+   * @intent 헤더 드롭다운 메뉴 열림/닫힘 토글 유틸리티
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   */
+  function toggleHeaderMenu() {
+    const menu = document.getElementById('header-dropdown-menu') || dom.headerDropdownMenu;
+    const btn = document.getElementById('btn-header-menu') || dom.btnHeaderMenu;
+    if (!menu) return;
+    const isHidden = menu.classList.contains('hidden');
+    if (isHidden) {
+      menu.classList.remove('hidden');
+      if (btn) btn.setAttribute('aria-expanded', 'true');
+    } else {
+      menu.classList.add('hidden');
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  /**
+   * @intent 상단 헤더 메뉴 및 클라우드 실시간 자동 동기화 배지 UI 갱신 (Strict No-Emoji 원칙 준수)
    * @agent  Gemini/manager-develop
    * @branch feat/mytriplog-core
    * @author @developer_name
@@ -1693,23 +1747,38 @@
    * @param {string} [customMessage] 
    */
   function updateCloudBadgeUI(state, customMessage) {
-    const badge = dom.btnOpenCloudSync;
-    const textEl = dom.cloudSyncBadgeText;
-    if (!badge) return;
-
-    badge.classList.remove('syncing', 'synced', 'error', 'idle');
-    badge.classList.add(state || 'synced');
-
     let labelText = customMessage || '';
     if (!labelText) {
       if (state === 'syncing') labelText = '동기화 중...';
-      else if (state === 'synced') labelText = '클라우드 자동 저장됨';
+      else if (state === 'synced') labelText = '실시간 자동 저장 중';
       else if (state === 'error') labelText = '로컬 보관 모드';
       else labelText = '클라우드 대기';
     }
 
-    if (textEl) textEl.textContent = labelText;
-    badge.setAttribute('title', `Supabase 클라우드: ${labelText} (클릭 시 상세 모달)`);
+    // 헤더 드롭다운 메뉴 내부 클라우드 텍스트 갱신
+    const menuStatusEl = document.getElementById('header-menu-cloud-status') || dom.headerMenuCloudStatus;
+    if (menuStatusEl) {
+      menuStatusEl.textContent = labelText;
+    }
+
+    // 헤더 드롭다운 메뉴 내부 sync-dot 상태 갱신
+    const menuCloudBtn = document.getElementById('btn-menu-cloud-sync') || dom.btnMenuCloudSync;
+    if (menuCloudBtn) {
+      const dot = menuCloudBtn.querySelector('.sync-dot');
+      if (dot) {
+        dot.className = 'sync-dot ' + (state === 'syncing' ? 'active' : (state === 'error' ? 'error' : 'active'));
+      }
+    }
+
+    // 기존 호환용 배지 존재 시 갱신
+    const badge = dom.btnOpenCloudSync || document.getElementById('btn-open-cloud-sync');
+    const textEl = dom.cloudSyncBadgeText || document.getElementById('cloud-sync-badge-text');
+    if (badge) {
+      badge.classList.remove('syncing', 'synced', 'error', 'idle');
+      badge.classList.add(state || 'synced');
+      if (textEl) textEl.textContent = labelText;
+      badge.setAttribute('title', `Supabase 클라우드: ${labelText}`);
+    }
   }
 
   /**
@@ -1743,7 +1812,7 @@
   }
 
   /**
-   * @intent Supabase 클라우드 PostgreSQL DB 및 스토리지 연동 설정 모달
+   * @intent Supabase 클라우드 PostgreSQL DB 및 스토리지 연동 상태 모달 (수동 입력 필드 제거 및 내장 클라우드 자동 관리)
    * @agent  Gemini/manager-develop
    * @branch feat/mytriplog-core
    * @author @developer_name
@@ -1760,12 +1829,12 @@
     const isConfigured = mgr.isConfigured();
     const initialStatusState = {
       status: isConfigured ? 'connected' : 'unconfigured',
-      message: isConfigured ? '연결 확인 대기 중' : '미설정 (로컬 오프라인 모드)'
+      message: isConfigured ? 'Supabase 클라우드 실시간 자동 연동 중' : '클라우드 연동 준비 중'
     };
 
     const sqlScript = mgr.getSetupSqlScript();
     const modalHtml = formManager.renderCloudSyncModalHtml(config, initialStatusState, sqlScript);
-    openModal('Supabase 클라우드 DB & 스토리지 동기화', modalHtml);
+    openModal('Supabase 클라우드 실시간 동기화', modalHtml);
 
     const updateStatusBadge = (status, text) => {
       const badge = document.getElementById('cloud-status-badge');
@@ -1775,94 +1844,21 @@
       if (textSpan) textSpan.textContent = text;
     };
 
-    // 설정이 이미 되어 있다면 열릴 때 연결 상태 백그라운드 확인
+    // 설정 상태 백그라운드 검증
     if (isConfigured) {
       mgr.testConnection().then((res) => {
         if (res.ok) {
-          updateStatusBadge('connected', '연결됨 (클라우드 실시간 동기화 활성)');
+          updateStatusBadge('connected', 'Supabase 클라우드 실시간 자동 연동 중');
         } else {
-          updateStatusBadge('error', '연결 오류: ' + (res.error || '접근 불가'));
+          updateStatusBadge('error', '클라우드 일시 지연: ' + (res.error || '접근 불가'));
         }
       }).catch((err) => {
-        updateStatusBadge('error', '연결 실패: ' + err.message);
+        updateStatusBadge('error', '클라우드 일시 지연: ' + err.message);
       });
     }
 
-    // 1. 연결 테스트 버튼 이벤트
-    document.getElementById('btn-cloud-test')?.addEventListener('click', async () => {
-      const urlInput = document.getElementById('supabase-project-url');
-      const keyInput = document.getElementById('supabase-anon-key');
-      const tempUrl = urlInput ? urlInput.value.trim() : '';
-      const tempKey = keyInput ? keyInput.value.trim() : '';
-
-      if (!tempUrl || !tempKey) {
-        showToast('Supabase URL과 Anon Key를 모두 입력해 주세요.');
-        updateStatusBadge('unconfigured', '미설정 (URL/Key 입력 필요)');
-        return;
-      }
-
-      mgr.saveConfig(tempUrl, tempKey);
-      updateStatusBadge('unconfigured', '연결 테스트 중...');
-      showToast('Supabase 연결 상태 확인 중...');
-
-      const res = await mgr.testConnection();
-      if (res.ok) {
-        updateStatusBadge('connected', '연결 성공: trips 테이블 접근 정상');
-        showToast('Supabase 클라우드 연결에 성공했습니다!');
-      } else {
-        updateStatusBadge('error', '연결 실패: ' + (res.error || '테이블 미존재'));
-        showToast('연결 실패: ' + (res.error || 'SQL 스크립트 실행 여부를 확인하세요.'));
-      }
-    });
-
-    // 2. 설정 저장 및 현재 여행 즉시 동기화
-    document.getElementById('cloud-sync-form')?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const form = e.target;
-      const url = form.projectUrl.value.trim();
-      const anonKey = form.anonKey.value.trim();
-
-      if (!url || !anonKey) {
-        showToast('Supabase Project URL과 Anon Key를 모두 입력해 주세요.');
-        return;
-      }
-
-      mgr.saveConfig(url, anonKey);
-      showToast('설정 저장 중 및 연결 검증...');
-
-      const testRes = await mgr.testConnection();
-      if (testRes.ok) {
-        updateStatusBadge('connected', '연결됨 (클라우드 실시간 동기화 활성)');
-        const currentTrip = store.getState().trip;
-        if (currentTrip) {
-          await mgr.syncTrip(currentTrip);
-        }
-        showToast('설정이 저장되었으며 현재 여행 계획이 클라우드에 동기화되었습니다.');
-      } else {
-        updateStatusBadge('error', '저장됨 (연결 실패: ' + testRes.error + ')');
-        showToast('저장 완료되었으나 연결 확인 실패: ' + testRes.error);
-      }
-    });
-
-    // 3. 설정 초기화 버튼 이벤트
-    document.getElementById('btn-cloud-clear')?.addEventListener('click', () => {
-      if (confirm('Supabase 클라우드 연결 설정을 초기화하시겠습니까?\n(로컬 데이터는 보존됩니다)')) {
-        mgr.clearConfig();
-        const urlInput = document.getElementById('supabase-project-url');
-        const keyInput = document.getElementById('supabase-anon-key');
-        if (urlInput) urlInput.value = '';
-        if (keyInput) keyInput.value = '';
-        updateStatusBadge('unconfigured', '미설정 (로컬 오프라인 모드)');
-        showToast('클라우드 연결 설정이 해제되었습니다.');
-      }
-    });
-
-    // 4. 로컬 데이터를 클라우드로 즉시 일괄 업로드
+    // 1. 로컬 데이터를 클라우드로 즉시 일괄 업로드
     document.getElementById('btn-cloud-upload-all')?.addEventListener('click', async () => {
-      if (!mgr.isConfigured()) {
-        showToast('먼저 Supabase 설정을 저장하고 연결을 확인해 주세요.');
-        return;
-      }
       try {
         showToast('로컬 여행 계획을 클라우드로 업로드 중...');
         const count = await store.syncAllToCloud();
@@ -1872,12 +1868,8 @@
       }
     });
 
-    // 5. 클라우드에서 데이터 가져오기 (복원)
+    // 2. 클라우드에서 최신 데이터 가져오기 (복원)
     document.getElementById('btn-cloud-import')?.addEventListener('click', async () => {
-      if (!mgr.isConfigured()) {
-        showToast('먼저 Supabase 설정을 저장하고 연결을 확인해 주세요.');
-        return;
-      }
       if (!confirm('Supabase 클라우드에 저장된 여행 데이터를 로컬로 가져와 복원하시겠습니까?')) {
         return;
       }
@@ -1895,8 +1887,9 @@
       }
     });
 
-    // 6. SQL 설정 스크립트 클립보드 복사
-    document.getElementById('btn-copy-setup-sql')?.addEventListener('click', async () => {
+    // 3. SQL 설정 스크립트 클립보드 복사
+    const copySqlBtn = document.getElementById('btn-copy-setup-sql') || document.querySelector('.btn-copy-sql');
+    copySqlBtn?.addEventListener('click', async () => {
       const codeTarget = document.getElementById('sql-code-target');
       const textToCopy = codeTarget ? codeTarget.textContent : mgr.getSetupSqlScript();
       const success = await copyToClipboard(textToCopy);
@@ -2302,32 +2295,41 @@
       setTimeout(() => mapManager.invalidateSize(), 300);
     });
 
-    // 13. 상단 헤더 액션 및 여행 관리 버튼
-    dom.btnOpenCloudSync?.addEventListener('click', () => {
-      openCloudSyncModal();
+    // 13. 상단 헤더 액션 및 더보기 드롭다운 메뉴 이벤트 바인딩
+    const btnHeaderMenu = document.getElementById('btn-header-menu') || dom.btnHeaderMenu;
+    const headerDropdownMenu = document.getElementById('header-dropdown-menu') || dom.headerDropdownMenu;
+
+    // 메뉴 토글 버튼 클릭 (이벤트 버블링 차단하여 즉시 닫히지 않도록 함)
+    btnHeaderMenu?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleHeaderMenu();
     });
 
-    dom.btnManageTrips?.addEventListener('click', () => {
-      openTripManagerModal('list');
-    });
-
-    dom.brandInfo?.addEventListener('click', () => {
-      openTripManagerModal('list');
-    });
-
-    dom.brandInfo?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        openTripManagerModal('list');
+    // 외부 클릭 시 드롭다운 닫기 (Click outside to close)
+    document.addEventListener('click', (e) => {
+      const menu = document.getElementById('header-dropdown-menu') || dom.headerDropdownMenu;
+      const btn = document.getElementById('btn-header-menu') || dom.btnHeaderMenu;
+      if (!menu || menu.classList.contains('hidden')) return;
+      if (!menu.contains(e.target) && !btn?.contains(e.target)) {
+        closeHeaderMenu();
       }
     });
 
-    dom.tripTitle?.addEventListener('click', (e) => {
-      e.stopPropagation();
+    // 드롭다운 메뉴 아이템: 1) 여행 정보 수정
+    document.getElementById('btn-menu-edit-trip')?.addEventListener('click', () => {
+      closeHeaderMenu();
+      openTripSettingsModal();
+    });
+
+    // 드롭다운 메뉴 아이템: 2) 여행 계획 목록 및 비교
+    document.getElementById('btn-menu-manage-trips')?.addEventListener('click', () => {
+      closeHeaderMenu();
       openTripManagerModal('list');
     });
 
-    dom.btnCopyShareLink?.addEventListener('click', async () => {
+    // 드롭다운 메뉴 아이템: 3) 여행 일정 링크 복사
+    document.getElementById('btn-menu-copy-share')?.addEventListener('click', async () => {
+      closeHeaderMenu();
       const currentTrip = store.getState().trip;
       const shareUrl = generateShareUrl(currentTrip);
       try {
@@ -2347,7 +2349,52 @@
       }
     });
 
-    dom.btnEditTrip?.addEventListener('click', openTripMetaModal);
+    // 드롭다운 메뉴 아이템: 4) 클라우드 동기화 상태 모달 열기
+    document.getElementById('btn-menu-cloud-sync')?.addEventListener('click', () => {
+      closeHeaderMenu();
+      openCloudSyncModal();
+    });
+
+    // 브랜드 로고/제목 클릭 시 여행 계획 목록 열기 (자연스럽게 유지)
+    dom.brandInfo?.addEventListener('click', () => {
+      openTripManagerModal('list');
+    });
+
+    dom.brandInfo?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openTripManagerModal('list');
+      }
+    });
+
+    dom.tripTitle?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openTripManagerModal('list');
+    });
+
+    // 기존 호환용 버튼 리스너 (DOM에 존재할 경우 안전 바인딩)
+    dom.btnOpenCloudSync?.addEventListener('click', openCloudSyncModal);
+    dom.btnManageTrips?.addEventListener('click', () => openTripManagerModal('list'));
+    dom.btnEditTrip?.addEventListener('click', openTripSettingsModal);
+    dom.btnCopyShareLink?.addEventListener('click', async () => {
+      const currentTrip = store.getState().trip;
+      const shareUrl = generateShareUrl(currentTrip);
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(shareUrl);
+        } else {
+          const tempInput = document.createElement('textarea');
+          tempInput.value = shareUrl;
+          document.body.appendChild(tempInput);
+          tempInput.select();
+          document.execCommand('copy');
+          tempInput.remove();
+        }
+        showToast('여행 일정 링크가 복사되었습니다!');
+      } catch (err) {
+        showToast('링크 복사에 실패했습니다.');
+      }
+    });
 
     // 14. 중앙 상태(Store) 변경 감지 구독
     store.subscribe((state) => {
