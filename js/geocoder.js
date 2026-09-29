@@ -40,7 +40,7 @@
     return new Promise((resolve) => {
       try {
         const geocoder = new google.maps.Geocoder();
-        geocoder.geocode({ address: query }, (results, status) => {
+        geocoder.geocode({ address: query, language: 'ko', region: 'KR' }, (results, status) => {
           if (status === google.maps.GeocoderStatus.OK && Array.isArray(results) && results.length > 0) {
             const mapped = results.slice(0, limit).map((item) => {
               const loc = item.geometry.location;
@@ -78,15 +78,16 @@
    * @returns {Promise<Array<{name: string, displayName: string, lat: number, lng: number, type: string, raw: object}>>}
    */
   async function searchViaNominatim(query, limit = 5) {
-    const url = `${NOMINATIM_BASE}/search?format=json&q=${encodeURIComponent(query)}&limit=${limit}&addressdetails=1`;
+    const url = `${NOMINATIM_BASE}/search?format=json&q=${encodeURIComponent(query)}&limit=${limit}&addressdetails=1&accept-language=ko`;
 
     try {
       const response = await fetch(url, {
         headers: {
           'Accept': 'application/json',
-          'Accept-Language': 'ko,en'
+          'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8'
         }
       });
+
 
       if (!response.ok) {
         throw new Error(`Nominatim HTTP ${response.status}`);
@@ -143,7 +144,7 @@
     return new Promise((resolve, reject) => {
       try {
         const geocoder = new google.maps.Geocoder();
-        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+        geocoder.geocode({ location: { lat, lng }, language: 'ko', region: 'KR' }, (results, status) => {
           if (status === google.maps.GeocoderStatus.OK && Array.isArray(results) && results.length > 0) {
             const first = results[0];
             const name = (first.address_components && first.address_components[0])
@@ -174,14 +175,15 @@
    * @returns {Promise<{name: string, displayName: string, lat: number, lng: number, raw: object}>}
    */
   async function reverseViaNominatim(lat, lng) {
-    const url = `${NOMINATIM_BASE}/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
+    const url = `${NOMINATIM_BASE}/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=ko`;
 
     const response = await fetch(url, {
       headers: {
         'Accept': 'application/json',
-        'Accept-Language': 'ko,en'
+        'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8'
       }
     });
+
 
     if (!response.ok) {
       throw new Error(`Nominatim reverse HTTP ${response.status}`);

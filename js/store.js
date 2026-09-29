@@ -99,7 +99,7 @@
         title: '호텔 그레이서리 신주쿠',
         checkInTime: '15:00',
         checkOutTime: '11:00',
-        address: '1-19-1 Kabukicho, Shinjuku, Tokyo',
+        address: '도쿄도 신주쿠구 카부키초 1-19-1 (호텔 그레이서리 신주쿠)',
         voucherNo: 'AGODA-771829',
         passcode: '키박스 4022#',
         luggageStorage: '체크인 전 무료 짐 보관 가능',
