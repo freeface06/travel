@@ -498,6 +498,17 @@
     transform: scaleX(1.08);
   }
 
+  /**
+   * @intent 모바일 바텀시트 내 중복 탭 제거 (화면 하단 네비게이션 바로 일원화)
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   */
+  .panel-nav-tabs {
+    display: none !important;
+  }
+
   /* 모바일 하단 네비게이션 바 */
   .mobile-bottom-nav {
     display: flex !important;
@@ -563,8 +574,16 @@
   }
 
 
+  /**
+   * @intent 모바일 바텀시트 내부 패딩 및 스크롤 영역 최적화 (손잡이 아래 자연스러운 여백 연결)
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
+   */
   .panel-content-area {
-    padding: 12px;
+    padding: 16px 14px 28px;
+    -webkit-overflow-scrolling: touch;
   }
 
   /* 지도 플로팅 버튼 모바일 위치 */
