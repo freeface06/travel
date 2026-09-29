@@ -964,6 +964,40 @@
     const modalForm = document.getElementById('item-editor-form');
     if (!modalForm) return;
 
+    // 천 단위 콤마 실시간 포맷팅 헬퍼
+    /**
+     * @intent 인풋 필드에 실시간 천 단위 콤마 포맷팅 및 커서 위치 보정 리스너 바인딩
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
+     * @param {HTMLInputElement} inputEl
+     */
+    function attachCommaFormatter(inputEl) {
+      if (!inputEl) return;
+      inputEl.addEventListener('input', () => {
+        const cursorPosition = inputEl.selectionEnd;
+        const originalLength = inputEl.value.length;
+        const digitsOnly = inputEl.value.replace(/[^\d]/g, '');
+        if (!digitsOnly) {
+          inputEl.value = '';
+          return;
+        }
+        const formatted = Number(digitsOnly).toLocaleString('ko-KR');
+        inputEl.value = formatted;
+        // 콤마 추가에 따른 자연스러운 커서 위치 보정
+        const newLength = formatted.length;
+        const newCursorPos = Math.max(0, cursorPosition + (newLength - originalLength));
+        inputEl.setSelectionRange(newCursorPos, newCursorPos);
+      });
+    }
+
+    const costInput = document.getElementById('item-cost');
+    attachCommaFormatter(costInput);
+
+    const ticketCostInput = document.getElementById('item-ticket-cost');
+    attachCommaFormatter(ticketCostInput);
+
     // 카테고리 알약 버튼 클릭 시 동적 필드 재렌더링
     const catGroup = document.getElementById('category-selector');
     const dynamicFields = document.getElementById('dynamic-category-fields');
@@ -977,6 +1011,8 @@
         inputCategory.value = cat;
         formManager.currentCategory = cat;
         dynamicFields.innerHTML = formManager.renderCategorySpecificFields(cat, defaultData);
+        // 동적 필드 재렌더링 시 입장료 콤마 포맷터 바인딩
+        attachCommaFormatter(document.getElementById('item-ticket-cost'));
       });
     });
 

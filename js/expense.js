@@ -26,7 +26,11 @@
   };
 
   /**
-   * 통화 환산 (기본 통화 또는 임의의 통화 간 변환)
+   * @intent 통화 환산 (동일 통화 환산 시 부동소수점 오차 원천 차단 및 정수 반환 보장)
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
    * @param {number} amount - 금액
    * @param {string} fromCurrency - 원래 통화
    * @param {string} toCurrency - 대상 통화
@@ -39,7 +43,7 @@
 
     const from = (fromCurrency || 'KRW').toUpperCase();
     const to = (toCurrency || 'KRW').toUpperCase();
-    if (from === to) return num;
+    if (from === to) return Math.round(num);
 
     const rates = Object.assign({}, DEFAULT_RATES, customRates);
     const fromRate = rates[from] !== undefined ? rates[from] : 1.0;
@@ -58,7 +62,11 @@
   }
 
   /**
-   * 전체 여행 지출 집계 요약 계산
+   * @intent 전체 여행 지출 집계 요약 계산 (정수 일원화 및 단수 오차 제거)
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
    * @param {Array<object>} items - 일정 아이템 목록
    * @param {Array<string>} participants - 참가자 목록
    * @param {string} baseCurrency - 기준 통화 (기본 'KRW')
@@ -90,17 +98,19 @@
       totalInBase += costInBase;
 
       // 카테고리별 누적
-      byCategory[category] = (byCategory[category] || 0) + costInBase;
+      byCategory[category] = Math.round((byCategory[category] || 0) + costInBase);
 
       // 원통화별 누적
-      byCurrency[currency] = (byCurrency[currency] || 0) + rawCost;
+      byCurrency[currency] = Math.round((byCurrency[currency] || 0) + rawCost);
 
       // 참가자별 결제액 누적
       if (!paidByMember[payer]) {
         paidByMember[payer] = 0;
       }
-      paidByMember[payer] += costInBase;
+      paidByMember[payer] = Math.round(paidByMember[payer] + costInBase);
     });
+
+    totalInBase = Math.round(totalInBase);
 
     return {
       totalInBase,

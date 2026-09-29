@@ -77,6 +77,10 @@
       const hasCoord = (data.lat !== undefined && data.lat !== null && data.lat !== '' && !isNaN(Number(data.lat))) &&
                        (data.lng !== undefined && data.lng !== null && data.lng !== '' && !isNaN(Number(data.lng)));
 
+      const formattedCost = (data.cost !== undefined && data.cost !== null && data.cost !== '' && !isNaN(Number(data.cost)))
+        ? Math.round(Number(data.cost)).toLocaleString('ko-KR')
+        : '';
+
       return `
         <form id="item-editor-form" class="editor-form" novalidate>
           <input type="hidden" name="itemId" value="${escapeHtml(data.id || '')}" />
@@ -146,8 +150,8 @@
           <div class="form-group expense-section">
             <label class="form-label" for="item-cost">비용 / 지출액</label>
             <div class="input-with-unit">
-              <input type="number" id="item-cost" name="cost" class="form-control" min="0" step="1" 
-                     placeholder="0 (금액만 숫자로 입력)" value="${escapeHtml(data.cost !== undefined && data.cost !== null ? data.cost : '')}" />
+              <input type="text" id="item-cost" name="cost" class="form-control" inputmode="numeric" 
+                     placeholder="0 (금액 입력)" value="${formattedCost}" />
               <span class="input-unit-badge">원</span>
             </div>
             <input type="hidden" id="item-currency" name="currency" value="KRW" />
@@ -312,6 +316,9 @@
           `;
 
         case 'ATTRACTION':
+          const formattedTicketCost = (data.ticketCostPerPerson !== undefined && data.ticketCostPerPerson !== null && data.ticketCostPerPerson !== '' && !isNaN(Number(data.ticketCostPerPerson)))
+            ? Math.round(Number(data.ticketCostPerPerson)).toLocaleString('ko-KR')
+            : '';
           return `
             <div class="category-field-box">
               <div class="form-row">
@@ -331,7 +338,7 @@
                 </div>
                 <div class="form-group flex-1">
                   <label class="form-label">1인당 입장료</label>
-                  <input type="number" name="ticketCostPerPerson" class="form-control" placeholder="0" value="${escapeHtml(data.ticketCostPerPerson || '')}" />
+                  <input type="text" id="item-ticket-cost" name="ticketCostPerPerson" class="form-control" inputmode="numeric" placeholder="0 (금액 입력)" value="${formattedTicketCost}" />
                 </div>
               </div>
               <div class="form-group">
@@ -443,7 +450,11 @@
     }
 
     /**
-     * 폼 제출 데이터 수집 및 객체 생성
+     * @intent 폼 제출 데이터 수집 및 천 단위 콤마 제거/정수 정제 보장
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
      * @param {HTMLFormElement} form 
      * @returns {object} 수집된 일정 객체
      */
@@ -454,7 +465,9 @@
       for (const [key, value] of formData.entries()) {
         const trimmed = typeof value === 'string' ? value.trim() : value;
         if (key === 'cost' || key === 'ticketCostPerPerson') {
-          result[key] = trimmed ? Number(trimmed) : 0;
+          const rawNumberStr = String(trimmed).replace(/,/g, '');
+          const num = Number(rawNumberStr);
+          result[key] = (rawNumberStr && !isNaN(num)) ? Math.round(num) : 0;
         } else if (key === 'day') {
           result[key] = Math.max(1, Number(trimmed) || 1);
         } else if (key === 'lat' || key === 'lng') {

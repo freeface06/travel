@@ -44,6 +44,9 @@ console.log('--- [Suite 1: 환율 환산 엔진 검증] ---');
 runTest('1-1. 동일 통화 환산 시 원래 금액 그대로 반환되어야 함', () => {
   const result = TripExpense.convertCurrency(10000, 'KRW', 'KRW');
   assert.strictEqual(result, 10000);
+  // 부동소수점 오차(예: 1499999.999) 유입 시에도 1500000 순수 정수로 정제 검증
+  const floatFix = TripExpense.convertCurrency(1499999.999, 'KRW', 'KRW');
+  assert.strictEqual(floatFix, 1500000);
 });
 
 runTest('1-2. 0원 또는 음수/NaN 입력 시 0 반환', () => {
