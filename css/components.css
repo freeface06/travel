@@ -1763,16 +1763,6 @@
   color: #475569;
 }
 
-/* Google Maps InfoWindow 내부 여백 및 둥글기 최적화 */
-.gm-style .gm-style-iw-c {
-  padding: 10px 12px !important;
-  border-radius: 12px !important;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
-}
-
-.gm-style .gm-style-iw-d {
-  overflow: auto !important;
-}
 
 /* 지도 줌(+/-) 컨트롤러 완전 숨김 (핀치 줌 및 마우스 휠 줌 활용) */
 .leaflet-control-zoom,

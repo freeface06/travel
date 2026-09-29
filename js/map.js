@@ -1,8 +1,8 @@
 /**
- * @intent 하이브리드 대화형 지도 렌더러 (Google Maps 우선 + Leaflet/OpenStreetMap 무오류 자동 폴백)
+ * @intent Leaflet/OpenStreetMap 단독 대화형 지도 렌더러 (Google Maps 의존성 완전 제거 및 단일 엔진 표준화)
  *         - 번호 SVG 커스텀 마커 (1, 2, 3...)
  *         - 일차별 고유 테마 컬러 Polyline 및 항공편(FLIGHT) 전용 점선 항공로
- *         - InfoWindow/팝업 및 카드-마커 양방향 연동
+ *         - Leaflet Popup 및 타임라인 카드-마커 양방향 연동
  *         - 지도 직접 클릭 핀 드롭 모드
  *         - 100% 반응형 및 모바일 바텀시트 연동
  *         - 시각적 +/- 줌 버튼 완전 제거 (핀치 줌 및 마우스 휠 줌 유지)
@@ -66,34 +66,8 @@
     `.trim();
   }
 
-  // 코드 기본 내장 Google Maps API 키 (Base64 인코딩으로 GitHub Push Protection 방화벽 안전 통과)
-  const DEFAULT_MAPS_KEY = (function () {
-    try {
-      if (typeof atob !== 'undefined') {
-        return atob('QUl6YVN5RHhjX1hqMDJRZTFWdU9sNGI5dE5KZnhzUUFDWEdmaW13');
-      }
-      if (typeof Buffer !== 'undefined') {
-        return Buffer.from('QUl6YVN5RHhjX1hqMDJRZTFWdU9sNGI5dE5KZnhzUUFDWEdmaW13', 'base64').toString('utf-8');
-      }
-    } catch (e) {}
-    return '';
-  })();
-
-  function getSavedGoogleApiKey() {
-    if (typeof localStorage === 'undefined') return DEFAULT_MAPS_KEY;
-    const userKey = (localStorage.getItem('mytriplog_gmaps_api_key') || '').trim();
-    return userKey || DEFAULT_MAPS_KEY;
-  }
-
-  function saveGoogleApiKey(key) {
-    if (typeof localStorage === 'undefined') return;
-    const clean = (key || '').trim();
-    if (clean) localStorage.setItem('mytriplog_gmaps_api_key', clean);
-    else localStorage.removeItem('mytriplog_gmaps_api_key');
-  }
-
   /**
-   * @intent 마커 클릭 시 InfoWindow 및 팝업용 미니 일정 카드 템플릿 생성
+   * @intent 마커 클릭 시 Leaflet 팝업용 미니 일정 카드 템플릿 생성
    * @agent  Gemini/manager-develop
    * @branch feat/mytriplog-core
    * @author @developer_name
@@ -136,10 +110,9 @@
 
   class TripMapManager {
     constructor() {
-      this.engine = 'none'; // 'google' | 'leaflet' | 'none'
+      this.engine = 'leaflet';
       this.map = null;
       this.containerId = 'map-container';
-      this.infoWindow = null; // Google Maps InfoWindow
       this.markers = [];
       this.polylines = [];
       this.pinDropMarker = null;
@@ -150,43 +123,21 @@
       this.currentCenter = [35.6895, 139.6917];
       this.currentZoom = 12;
       this.currentRenderedDay = null;
-    }
-
-    setApiKeyBannerVisible(visible) {
-      if (typeof document === 'undefined') return;
-      const banner = document.getElementById('map-api-key-banner');
-      if (banner) {
-        banner.classList.toggle('hidden', !visible);
-      }
-    }
-
-    isGoogleMapsReady() {
-      return Boolean(typeof window !== 'undefined' && window.google && window.google.maps && window.google.maps.Map);
+      this.pendingRender = null;
+      this.lastRenderArgs = null;
     }
 
     /**
-     * Google Maps JavaScript API 동적 주입 및 로드
+     * 외부 하위 호환성을 위한 no-op 메서드
      */
-    loadGoogleScript(apiKey) {
-      return new Promise((resolve, reject) => {
-        if (this.isGoogleMapsReady()) return resolve();
-        if (typeof document === 'undefined') return reject(new Error('Document not ready'));
-
-        const existing = document.querySelector('script[src*="maps.googleapis.com"]');
-        if (existing) existing.remove();
-
-        const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey.trim())}&libraries=places&language=ko&region=KR&loading=async`;
-        script.async = true;
-        script.defer = true;
-        script.onload = () => resolve();
-        script.onerror = (err) => reject(err);
-        document.head.appendChild(script);
-      });
-    }
+    setApiKeyBannerVisible() {}
 
     /**
-     * 지도 초기화 (코드 내장 키로 Google Maps 무조건 1순위 자동 실행)
+     * @intent Leaflet 단독 지도 초기화
+     * @agent  Gemini/manager-develop
+     * @branch feat/mytriplog-core
+     * @author @developer_name
+     * @date   2026-09-29
      */
     async init(containerId = 'map-container', initialCenter = [35.6895, 139.6917], initialZoom = 12) {
       this.containerId = containerId;
@@ -197,119 +148,20 @@
       const container = document.getElementById(containerId);
       if (!container) return;
 
-      const activeKey = getSavedGoogleApiKey();
-
-      // 1. 코드 내장 Google Maps API 키로 즉시 Google Maps 스크립트 로드 및 초기화
-      if (activeKey) {
-        try {
-          await this.loadGoogleScript(activeKey);
-          if (this.isGoogleMapsReady()) {
-            this.initGoogleMaps(container, initialCenter, initialZoom);
-            return;
-          }
-        } catch (err) {
-          console.warn('Google Maps load failed. Falling back to Leaflet:', err);
-        }
-      }
-
-      // 2. 키가 없거나 로드 실패 시 Leaflet(OpenStreetMap)으로 안정 폴백
       if (typeof L !== 'undefined') {
         this.initLeaflet(container, initialCenter, initialZoom);
       }
     }
 
     /**
-     * 사용자가 API 키를 새로 입력/수정했을 때 즉시 엔진 전환
+     * 외부 하위 호환성을 위한 no-op 메서드
      */
-    async updateApiKey(newKey) {
-      const key = (newKey || '').trim();
-      if (typeof localStorage !== 'undefined') {
-        if (key) localStorage.setItem('mytriplog_gmaps_api_key', key);
-        else localStorage.removeItem('mytriplog_gmaps_api_key');
-      }
-
-      const container = document.getElementById(this.containerId);
-      if (!container) return false;
-
-      if (key) {
-        try {
-          await this.loadGoogleScript(key);
-          if (this.isGoogleMapsReady()) {
-            this.initGoogleMaps(container, this.currentCenter, this.currentZoom);
-            return true;
-          }
-        } catch (err) {
-          console.error('Failed to switch to Google Maps:', err);
-        }
-      } else {
-        if (typeof L !== 'undefined') {
-          this.initLeaflet(container, this.currentCenter, this.currentZoom);
-          return true;
-        }
-      }
+    async updateApiKey() {
       return false;
     }
 
     /**
-     * @intent Google Maps 초기화 (시각적 +/- 줌 컨트롤 비활성화, 제스처 줌 유지)
-     * @agent  Gemini/manager-develop
-     * @branch feat/mytriplog-core
-     * @author @developer_name
-     * @date   2026-09-29
-     */
-    initGoogleMaps(container, initialCenter, initialZoom) {
-      this.engine = 'google';
-      this.setApiKeyBannerVisible(false);
-
-      try {
-        // 기존 Leaflet 인스턴스가 있다면 정리
-        if (this.map && typeof this.map.remove === 'function') {
-          this.map.remove();
-          this.map = null;
-        }
-
-        const centerLatLng = { lat: initialCenter[0], lng: initialCenter[1] };
-        this.map = new google.maps.Map(container, {
-          center: centerLatLng,
-          zoom: initialZoom,
-          mapTypeId: google.maps.MapTypeId.ROADMAP,
-          zoomControl: false,
-          mapTypeControl: false,
-          scaleControl: true,
-          streetViewControl: false,
-          rotateControl: false,
-          fullscreenControl: false,
-          gestureHandling: 'greedy'
-        });
-
-        this.infoWindow = new google.maps.InfoWindow();
-
-        this.map.addListener('click', (e) => {
-          if (!e || !e.latLng) return;
-          const lat = e.latLng.lat();
-          const lng = e.latLng.lng();
-          if (this.isPinDropActive) {
-            this.setPinDropPreview(lat, lng);
-            if (this.onPinDropListener) this.onPinDropListener(lat, lng);
-          }
-        });
-
-        // 비동기 대기 중 보관된 렌더링 즉시 실행
-        if (this.pendingRender) {
-          const { items, dayNumber, selectedItemId } = this.pendingRender;
-          this.pendingRender = null;
-          this.render(items, dayNumber, selectedItemId);
-        }
-      } catch (err) {
-        console.warn('Google Maps init failed, switching to Leaflet fallback:', err);
-        if (typeof L !== 'undefined') {
-          this.initLeaflet(container, initialCenter, initialZoom);
-        }
-      }
-    }
-
-    /**
-     * @intent Leaflet 초기화 (무오류 안정 폴백, +/- 줌 컨트롤 제거 및 핀치/휠 줌 유지)
+     * @intent Leaflet 초기화 (+/- 줌 컨트롤 제거 및 핀치/마우스 휠 줌 유지)
      * @agent  Gemini/manager-develop
      * @branch feat/mytriplog-core
      * @author @developer_name
@@ -317,7 +169,6 @@
      */
     initLeaflet(container, initialCenter, initialZoom) {
       this.engine = 'leaflet';
-      this.setApiKeyBannerVisible(false);
 
       try {
         if (this.map && typeof this.map.remove === 'function') {
@@ -352,31 +203,6 @@
       }
     }
 
-    /**
-     * Google Maps 인증/활성화 실패 시 Leaflet(OpenStreetMap)으로 무오류 즉시 폴백
-     */
-    fallbackToLeaflet(reason = '') {
-      if (this.engine === 'leaflet') return;
-      this.engine = 'leaflet';
-      console.warn('Google Maps error detected, fallback to Leaflet:', reason);
-
-      const container = document.getElementById(this.containerId);
-      if (!container) return;
-
-      container.innerHTML = '';
-      this.map = null;
-      this.markers = [];
-      this.polylines = [];
-      this.markerMap.clear();
-
-      this.initLeaflet(container, this.currentCenter, this.currentZoom);
-
-      if (this.lastRenderArgs) {
-        const { items, dayNumber, selectedItemId } = this.lastRenderArgs;
-        this.render(items, dayNumber, selectedItemId);
-      }
-    }
-
     setMarkerClickListener(listener) {
       this.onMarkerClickListener = listener;
     }
@@ -388,15 +214,8 @@
     setPinDropMode(enabled) {
       this.isPinDropActive = Boolean(enabled);
 
-      if (this.engine === 'google' && this.map) {
-        this.map.setOptions({
-          draggableCursor: this.isPinDropActive ? 'crosshair' : null
-        });
-      }
-
-      if (!this.isPinDropActive && this.pinDropMarker) {
-        if (this.engine === 'google') this.pinDropMarker.setMap(null);
-        else if (this.engine === 'leaflet') this.map.removeLayer(this.pinDropMarker);
+      if (!this.isPinDropActive && this.pinDropMarker && this.map) {
+        this.map.removeLayer(this.pinDropMarker);
         this.pinDropMarker = null;
       }
     }
@@ -405,42 +224,21 @@
       if (!this.map) return;
 
       if (this.pinDropMarker) {
-        if (this.engine === 'google') this.pinDropMarker.setMap(null);
-        else if (this.engine === 'leaflet') this.map.removeLayer(this.pinDropMarker);
+        this.map.removeLayer(this.pinDropMarker);
       }
 
-      if (this.engine === 'google') {
-        this.pinDropMarker = new google.maps.Marker({
-          position: { lat, lng },
-          map: this.map,
-          title: '선택한 위치',
-          zIndex: 1000
-        });
-
-        if (this.infoWindow) {
-          const div = document.createElement('div');
-          div.style.padding = '4px 8px';
-          div.textContent = `선택 위치: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-          this.infoWindow.setContent(div);
-          this.infoWindow.open(this.map, this.pinDropMarker);
-        }
-      } else if (this.engine === 'leaflet') {
-        const icon = L.divIcon({
-          className: 'pin-drop-preview-icon',
-          html: `<div style="width:14px;height:14px;background:#ef4444;border:2px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.4);"></div>`,
-          iconSize: [14, 14],
-          iconAnchor: [7, 7]
-        });
-        this.pinDropMarker = L.marker([lat, lng], { icon }).addTo(this.map);
-        this.pinDropMarker.bindPopup(`선택 위치: ${lat.toFixed(4)}, ${lng.toFixed(4)}`).openPopup();
-      }
+      const icon = L.divIcon({
+        className: 'pin-drop-preview-icon',
+        html: `<div style="width:14px;height:14px;background:#ef4444;border:2px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.4);"></div>`,
+        iconSize: [14, 14],
+        iconAnchor: [7, 7]
+      });
+      this.pinDropMarker = L.marker([lat, lng], { icon }).addTo(this.map);
+      this.pinDropMarker.bindPopup(`선택 위치: ${lat.toFixed(4)}, ${lng.toFixed(4)}`).openPopup();
     }
 
     clearLayers() {
-      if (this.engine === 'google') {
-        this.markers.forEach((m) => m.setMap(null));
-        this.polylines.forEach((p) => p.setMap(null));
-      } else if (this.engine === 'leaflet' && this.map) {
+      if (this.map) {
         this.markers.forEach((m) => this.map.removeLayer(m));
         this.polylines.forEach((p) => this.map.removeLayer(p));
       }
@@ -476,91 +274,42 @@
 
         points.push([lat, lng]);
 
-        if (this.engine === 'google') {
-          const svgStr = createNumberedSvgString(order, themeColor, isSelected);
-          const iconObj = {
-            url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svgStr)}`,
-            scaledSize: new google.maps.Size(isSelected ? 36 : 30, isSelected ? 46 : 40),
-            anchor: new google.maps.Point(isSelected ? 18 : 15, isSelected ? 46 : 40)
-          };
+        const svgStr = createNumberedSvgString(order, themeColor, isSelected);
+        const icon = L.divIcon({
+          className: 'numbered-custom-pin',
+          html: svgStr,
+          iconSize: [isSelected ? 36 : 30, isSelected ? 46 : 40],
+          iconAnchor: [isSelected ? 18 : 15, isSelected ? 46 : 40],
+          popupAnchor: [0, -40]
+        });
 
-          const marker = new google.maps.Marker({
-            position: { lat, lng },
-            map: this.map,
-            title: item.title || `장소 ${order}`,
-            icon: iconObj,
-            zIndex: isSelected ? 900 : 100 + order
-          });
+        const marker = L.marker([lat, lng], { icon, zIndexOffset: isSelected ? 1000 : order * 10 }).addTo(this.map);
+        const popupHtml = createMarkerPopupHtml(item, order, themeColor);
+        marker.popupHtml = popupHtml;
+        marker.bindPopup(popupHtml, { minWidth: 200, className: 'leaflet-custom-popup' });
 
-          const popupHtml = createMarkerPopupHtml(item, order, themeColor);
-          marker.popupHtml = popupHtml;
+        marker.on('click', () => {
+          marker.openPopup();
+          if (this.onMarkerClickListener) this.onMarkerClickListener(item.id);
+        });
 
-          marker.addListener('click', () => {
-            if (this.infoWindow) {
-              this.infoWindow.setContent(createMarkerPopupHtml(item, order, themeColor));
-              this.infoWindow.open(this.map, marker);
-            }
-            if (this.onMarkerClickListener) this.onMarkerClickListener(item.id);
-          });
-
-          if (isSelected && this.infoWindow) {
-            this.infoWindow.setContent(popupHtml);
-            this.infoWindow.open(this.map, marker);
-          }
-
-          this.markers.push(marker);
-          this.markerMap.set(item.id, marker);
-        } else if (this.engine === 'leaflet') {
-          const svgStr = createNumberedSvgString(order, themeColor, isSelected);
-          const icon = L.divIcon({
-            className: 'numbered-custom-pin',
-            html: svgStr,
-            iconSize: [isSelected ? 36 : 30, isSelected ? 46 : 40],
-            iconAnchor: [isSelected ? 18 : 15, isSelected ? 46 : 40],
-            popupAnchor: [0, -40]
-          });
-
-          const marker = L.marker([lat, lng], { icon, zIndexOffset: isSelected ? 1000 : order * 10 }).addTo(this.map);
-          const popupHtml = createMarkerPopupHtml(item, order, themeColor);
-          marker.popupHtml = popupHtml;
-          marker.bindPopup(popupHtml, { minWidth: 200, className: 'leaflet-custom-popup' });
-
-          marker.on('click', () => {
-            marker.openPopup();
-            if (this.onMarkerClickListener) this.onMarkerClickListener(item.id);
-          });
-
-          if (isSelected) {
-            marker.openPopup();
-          }
-
-          this.markers.push(marker);
-          this.markerMap.set(item.id, marker);
+        if (isSelected) {
+          marker.openPopup();
         }
+
+        this.markers.push(marker);
+        this.markerMap.set(item.id, marker);
       });
 
       // 경로선(Polyline) 렌더링
       if (points.length >= 2) {
-        if (this.engine === 'google') {
-          const path = points.map((p) => ({ lat: p[0], lng: p[1] }));
-          const polyline = new google.maps.Polyline({
-            path,
-            geodesic: true,
-            strokeColor: themeColor,
-            strokeOpacity: 0.85,
-            strokeWeight: 4,
-            map: this.map
-          });
-          this.polylines.push(polyline);
-        } else if (this.engine === 'leaflet') {
-          const polyline = L.polyline(points, {
-            color: themeColor,
-            weight: 4,
-            opacity: 0.85,
-            lineJoin: 'round'
-          }).addTo(this.map);
-          this.polylines.push(polyline);
-        }
+        const polyline = L.polyline(points, {
+          color: themeColor,
+          weight: 4,
+          opacity: 0.85,
+          lineJoin: 'round'
+        }).addTo(this.map);
+        this.polylines.push(polyline);
       }
 
       // 비행기(FLIGHT) 전용 점선 항공로 렌더링
@@ -569,29 +318,13 @@
           const startPt = [Number(item.lat), Number(item.lng)];
           const endPt = [Number(item.destLat), Number(item.destLng)];
 
-          if (this.engine === 'google') {
-            const flightPoly = new google.maps.Polyline({
-              path: [{ lat: startPt[0], lng: startPt[1] }, { lat: endPt[0], lng: endPt[1] }],
-              geodesic: true,
-              strokeColor: '#0284c7',
-              strokeOpacity: 0,
-              icons: [{
-                icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.8, scale: 3, strokeColor: '#0284c7' },
-                offset: '0',
-                repeat: '12px'
-              }],
-              map: this.map
-            });
-            this.polylines.push(flightPoly);
-          } else if (this.engine === 'leaflet') {
-            const flightPoly = L.polyline([startPt, endPt], {
-              color: '#0284c7',
-              weight: 3,
-              opacity: 0.8,
-              dashArray: '8, 8'
-            }).addTo(this.map);
-            this.polylines.push(flightPoly);
-          }
+          const flightPoly = L.polyline([startPt, endPt], {
+            color: '#0284c7',
+            weight: 3,
+            opacity: 0.8,
+            dashArray: '8, 8'
+          }).addTo(this.map);
+          this.polylines.push(flightPoly);
         }
       });
 
@@ -599,18 +332,12 @@
       const dayChanged = this.currentRenderedDay !== dayNumber;
       this.currentRenderedDay = dayNumber;
       if (points.length > 0 && dayChanged) {
-        if (this.engine === 'google') {
-          const bounds = new google.maps.LatLngBounds();
-          points.forEach((p) => bounds.extend({ lat: p[0], lng: p[1] }));
-          this.map.fitBounds(bounds, 40);
-        } else if (this.engine === 'leaflet') {
-          this.map.fitBounds(points, { padding: [40, 40], maxZoom: 15 });
-        }
+        this.map.fitBounds(points, { padding: [40, 40], maxZoom: 15 });
       }
     }
 
     /**
-     * @intent 특정 마커 위치로 카메라 부드러운 이동 및 팝업/InfoWindow 활성화
+     * @intent 특정 마커 위치로 카메라 부드러운 이동 및 팝업 활성화
      * @agent  Gemini/manager-develop
      * @branch feat/mytriplog-core
      * @author @developer_name
@@ -621,41 +348,20 @@
       const marker = this.markerMap.get(targetId);
       if (!marker || !this.map) return;
 
-      if (this.engine === 'google') {
-        const pos = marker.getPosition();
-        this.map.panTo(pos);
-        this.map.setZoom(15);
-        if (this.infoWindow && marker.popupHtml) {
-          this.infoWindow.setContent(marker.popupHtml);
-          this.infoWindow.open(this.map, marker);
-        }
-      } else if (this.engine === 'leaflet') {
-        const latlng = marker.getLatLng();
-        this.map.flyTo(latlng, 15, { duration: 0.8 });
-        marker.openPopup();
-      }
+      const latlng = marker.getLatLng();
+      this.map.flyTo(latlng, 15, { duration: 0.8 });
+      marker.openPopup();
     }
 
     invalidateSize() {
       if (!this.map) return;
-      if (this.engine === 'google' && typeof google !== 'undefined' && google.maps) {
-        google.maps.event.trigger(this.map, 'resize');
-      } else if (this.engine === 'leaflet' && typeof this.map.invalidateSize === 'function') {
+      if (typeof this.map.invalidateSize === 'function') {
         this.map.invalidateSize();
       }
     }
   }
 
-
   const mapManager = new TripMapManager();
-
-  // Google Maps API 인증 및 활성화 실패(ApiNotActivatedMapError 등) 시 전역 폴백 등록
-  if (typeof window !== 'undefined') {
-    window.gm_authFailure = function () {
-      console.warn('Google Maps API auth failure detected (ApiNotActivatedMapError). Auto-fallback to Leaflet.');
-      mapManager.fallbackToLeaflet('ApiNotActivatedMapError');
-    };
-  }
 
   return {
     TripMapManager,
@@ -663,7 +369,7 @@
     DAY_COLORS,
     getDayColor,
     createMarkerPopupHtml,
-    getSavedGoogleApiKey,
-    saveGoogleApiKey
+    getSavedGoogleApiKey: () => '',
+    saveGoogleApiKey: () => {}
   };
 });

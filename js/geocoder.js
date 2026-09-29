@@ -1,5 +1,5 @@
 /**
- * @intent Google Maps Geocoder 및 OpenStreetMap Nominatim 폴백 지오코딩/역지오코딩 모듈
+ * @intent OpenStreetMap Nominatim 기반 순수 지오코딩/역지오코딩 모듈 (Google 의존성 완전 제거)
  * @agent  Gemini/manager-develop
  * @branch feat/mytriplog-core
  * @author @developer_name
@@ -18,61 +18,15 @@
   const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org';
 
   /**
-   * Google Maps Geocoder 서비스 인스턴스 반환 가능 여부 확인
+   * Google Maps Geocoder 서비스 인스턴스 반환 가능 여부 확인 (외부 하위 호환성 유지: 상시 false)
    * @returns {boolean}
    */
   function isGoogleGeocoderAvailable() {
-    return Boolean(
-      typeof window !== 'undefined' &&
-      window.google &&
-      window.google.maps &&
-      window.google.maps.Geocoder
-    );
+    return false;
   }
 
   /**
-   * Google Geocoder를 통한 장소/주소 검색
-   * @param {string} query 
-   * @param {number} limit 
-   * @returns {Promise<Array<{name: string, displayName: string, lat: number, lng: number, type: string, raw: object}>>}
-   */
-  function searchViaGoogle(query, limit = 5) {
-    return new Promise((resolve) => {
-      try {
-        const geocoder = new google.maps.Geocoder();
-        geocoder.geocode({ address: query, language: 'ko', region: 'KR' }, (results, status) => {
-          if (status === google.maps.GeocoderStatus.OK && Array.isArray(results) && results.length > 0) {
-            const mapped = results.slice(0, limit).map((item) => {
-              const loc = item.geometry.location;
-              const lat = typeof loc.lat === 'function' ? loc.lat() : Number(loc.lat);
-              const lng = typeof loc.lng === 'function' ? loc.lng() : Number(loc.lng);
-              const name = (item.address_components && item.address_components[0])
-                ? item.address_components[0].long_name
-                : item.formatted_address;
-
-              return {
-                name,
-                displayName: item.formatted_address,
-                lat,
-                lng,
-                type: (item.types && item.types[0]) || 'place',
-                raw: item
-              };
-            });
-            resolve(mapped);
-          } else {
-            resolve([]);
-          }
-        });
-      } catch (err) {
-        console.warn('Google Geocoder search failed, fallback will be used:', err.message);
-        resolve([]);
-      }
-    });
-  }
-
-  /**
-   * Nominatim(OpenStreetMap)을 통한 장소/주소 검색 (Google API 키 미설정 또는 실패 시 폴백)
+   * Nominatim(OpenStreetMap)을 통한 장소/주소 검색
    * @param {string} query 
    * @param {number} limit 
    * @returns {Promise<Array<{name: string, displayName: string, lat: number, lng: number, type: string, raw: object}>>}
@@ -87,7 +41,6 @@
           'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8'
         }
       });
-
 
       if (!response.ok) {
         throw new Error(`Nominatim HTTP ${response.status}`);
@@ -109,7 +62,11 @@
   }
 
   /**
-   * 장소/주소 통합 검색 (Google Geocoder 우선 -> Nominatim 폴백)
+   * @intent 장소/주소 통합 검색 (OpenStreetMap Nominatim 단독 엔진)
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
    * @param {string} query - 검색어
    * @param {number} limit - 최대 반환 건수
    * @returns {Promise<Array<{name: string, displayName: string, lat: number, lng: number, type: string, raw: object}>>}
@@ -118,58 +75,11 @@
     const q = (query || '').trim();
     if (!q || q.length < 2) return [];
 
-    // 1. Google Geocoder 사용 시도
-    if (isGoogleGeocoderAvailable()) {
-      try {
-        const googleResults = await searchViaGoogle(q, limit);
-        if (googleResults && googleResults.length > 0) {
-          return googleResults;
-        }
-      } catch (e) {
-        console.warn('Google Geocoder exception, using Nominatim fallback:', e.message);
-      }
-    }
-
-    // 2. Nominatim 폴백 검색
     return await searchViaNominatim(q, limit);
   }
 
   /**
-   * Google Geocoder를 통한 역지오코딩
-   * @param {number} lat 
-   * @param {number} lng 
-   * @returns {Promise<{name: string, displayName: string, lat: number, lng: number, raw: object}>}
-   */
-  function reverseViaGoogle(lat, lng) {
-    return new Promise((resolve, reject) => {
-      try {
-        const geocoder = new google.maps.Geocoder();
-        geocoder.geocode({ location: { lat, lng }, language: 'ko', region: 'KR' }, (results, status) => {
-          if (status === google.maps.GeocoderStatus.OK && Array.isArray(results) && results.length > 0) {
-            const first = results[0];
-            const name = (first.address_components && first.address_components[0])
-              ? first.address_components[0].long_name
-              : first.formatted_address;
-
-            resolve({
-              name,
-              displayName: first.formatted_address,
-              lat,
-              lng,
-              raw: first
-            });
-          } else {
-            reject(new Error(`Google reverse geocode status: ${status}`));
-          }
-        });
-      } catch (err) {
-        reject(err);
-      }
-    });
-  }
-
-  /**
-   * Nominatim을 통한 역지오코딩 (폴백)
+   * Nominatim을 통한 역지오코딩
    * @param {number} lat 
    * @param {number} lng 
    * @returns {Promise<{name: string, displayName: string, lat: number, lng: number, raw: object}>}
@@ -183,7 +93,6 @@
         'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8'
       }
     });
-
 
     if (!response.ok) {
       throw new Error(`Nominatim reverse HTTP ${response.status}`);
@@ -201,7 +110,11 @@
   }
 
   /**
-   * 위경도 좌표 역지오코딩 (Google Geocoder 우선 -> Nominatim 폴백)
+   * @intent 위경도 좌표 역지오코딩 (OpenStreetMap Nominatim 단독 엔진)
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
    * @param {number} lat - 위도
    * @param {number} lng - 경도
    * @returns {Promise<{name: string, displayName: string, lat: number, lng: number}>}
@@ -211,14 +124,6 @@
     const longitude = Number(lng);
     if (isNaN(latitude) || isNaN(longitude)) {
       throw new Error('Invalid coordinates for reverse geocoding');
-    }
-
-    if (isGoogleGeocoderAvailable()) {
-      try {
-        return await reverseViaGoogle(latitude, longitude);
-      } catch (err) {
-        console.warn('Google reverse geocode failed, using Nominatim fallback:', err.message);
-      }
     }
 
     try {

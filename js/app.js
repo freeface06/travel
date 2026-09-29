@@ -1,5 +1,5 @@
 /**
- * @intent 메인 애플리케이션 진입점 및 전역 이벤트 오케스트레이터 (지도 플로팅 컨트롤 제거 및 클린 뷰포트 확보)
+ * @intent 메인 애플리케이션 진입점 및 전역 이벤트 오케스트레이터 (Google Maps 의존성 완전 제거 및 Leaflet 단독 표준화)
  * @agent  Gemini/manager-develop
  * @branch feat/mytriplog-core
  * @author @developer_name
@@ -1199,7 +1199,11 @@
   }
 
   /**
-   * 여행 메타데이터 편집 모달 열기
+   * @intent 여행 메타데이터 편집 모달 열기 (순수 여행 정보만 편집하도록 구글맵 API키 설정 섹션 완전 제거)
+   * @agent  Gemini/manager-develop
+   * @branch feat/mytriplog-core
+   * @author @developer_name
+   * @date   2026-09-29
    */
   function openTripMetaModal() {
     const trip = store.getState().trip;
@@ -1222,15 +1226,6 @@
           </div>
         </div>
         <input type="hidden" id="meta-base-currency" name="baseCurrency" value="KRW" />
-        <div class="form-group">
-          <label class="form-label" for="meta-gmaps-key">Google Maps API 키</label>
-          <input type="text" id="meta-gmaps-key" name="gmapsKey" class="form-control" 
-                 placeholder="AIzaSy... (입력 시 고화질 구글 지도로 즉시 전환)" 
-                 value="${escapeHtml(TripMap.getSavedGoogleApiKey() || '')}" />
-          <span style="font-size:0.72rem; color:var(--text-muted); margin-top:3px; display:block;">
-            Google Cloud에서 발급받은 API 키를 입력하시면 브라우저에 안전하게 저장되고 Google Maps로 즉시 전환됩니다.
-          </span>
-        </div>
         <div class="modal-form-actions">
           <button type="button" id="btn-meta-cancel" class="btn btn-secondary">취소</button>
           <button type="submit" class="btn btn-primary">
@@ -1250,7 +1245,6 @@
       const startDate = form.startDate.value;
       const endDate = form.endDate.value;
       const baseCurrency = form.baseCurrency.value;
-      const gmapsKey = (form.gmapsKey ? form.gmapsKey.value : '').trim();
 
       store.updateMetadata({
         title,
@@ -1259,15 +1253,6 @@
         participants: ['신랑', '신부'],
         baseCurrency
       });
-
-      const currentKey = TripMap.getSavedGoogleApiKey();
-      if (gmapsKey !== currentKey) {
-        mapManager.updateApiKey(gmapsKey).then((success) => {
-          if (success) {
-            showToast('Google Maps로 전환되었습니다.');
-          }
-        });
-      }
 
       showToast('여행 기본 정보가 수정되었습니다.');
       closeModal();

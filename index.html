@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <!--
-    @intent MyTripLog 단일 진실 원천(SSOT) 진입점 웹 애플리케이션 (지도 플로팅 컨트롤 정리 및 클린 지도 뷰포트 확보)
+    @intent MyTripLog 단일 진실 원천(SSOT) 진입점 웹 애플리케이션 (Google Maps 의존성 완전 제거 및 Leaflet 단독 표준화)
     @agent  Gemini/manager-develop
     @branch feat/mytriplog-core
     @author @developer_name
@@ -18,9 +18,8 @@
   <link rel="apple-touch-icon" href="favicon.svg" />
 
   <!--
-    지능형 하이브리드 지도 엔진:
-    - Google Maps API 키가 설정되어 있으면 고화질 Google Maps로 동작
-    - API 키가 없거나 플레이스홀더인 경우 Leaflet(OpenStreetMap)으로 무오류 자동 폴백
+    오픈소스 지도 엔진:
+    - Leaflet(OpenStreetMap) 기반의 가볍고 안정적인 여행 지도 뷰포트
   -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
@@ -29,10 +28,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js" crossorigin=""></script>
 
   <!-- 스타일시트 (캐시 버스팅 적용) -->
-  <link rel="stylesheet" href="css/reset.css?v=20260929_1740" />
-  <link rel="stylesheet" href="css/variables.css?v=20260929_1740" />
-  <link rel="stylesheet" href="css/layout.css?v=20260929_1740" />
-  <link rel="stylesheet" href="css/components.css?v=20260929_1740" />
+  <link rel="stylesheet" href="css/reset.css?v=20260929_1750" />
+  <link rel="stylesheet" href="css/variables.css?v=20260929_1750" />
+  <link rel="stylesheet" href="css/layout.css?v=20260929_1750" />
+  <link rel="stylesheet" href="css/components.css?v=20260929_1750" />
 </head>
 <body>
   <div class="app-container">
@@ -121,31 +120,9 @@
         </div>
       </aside>
 
-      <!-- 우측 Google 지도 영역 -->
+      <!-- 우측 여행 지도 뷰포트 영역 -->
       <section class="map-view-container" aria-label="여행 지도">
         <div id="map-container"></div>
-
-        <!-- Google Maps API 키 안내 오버레이 배너 -->
-        <div id="map-api-key-banner" class="map-api-key-banner hidden">
-          <div class="map-banner-card">
-            <div class="map-banner-icon">
-              <!-- 정보 알림 SVG 아이콘 -->
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
-              </svg>
-            </div>
-            <div class="map-banner-content">
-              <h3 class="map-banner-title">Google Maps API 키 설정 필요</h3>
-              <p class="map-banner-desc">
-                Google Maps를 정상적으로 렌더링하려면 <code>index.html</code> 상단의
-                <code>YOUR_GOOGLE_MAPS_API_KEY</code>를 발급받은 Google Cloud API 키로 교체해 주십시오.
-              </p>
-              <p class="map-banner-sub">
-                * API 키 미입력 상태에서도 장소 검색(오픈스트리트맵 폴백) 및 일정/정산 기능은 온전히 동작합니다.
-              </p>
-            </div>
-          </div>
-        </div>
       </section>
     </main>
 
@@ -241,14 +218,14 @@
   <div class="toast-container" id="toast-container"></div>
 
   <!-- 스크립트 모듈 로드 (캐시 버스팅 적용) -->
-  <script src="js/icons.js?v=20260929_1740"></script>
-  <script src="js/db.js?v=20260929_1740"></script>
-  <script src="js/expense.js?v=20260929_1740"></script>
-  <script src="js/store.js?v=20260929_1740"></script>
-  <script src="js/geocoder.js?v=20260929_1740"></script>
-  <script src="js/map.js?v=20260929_1740"></script>
-  <script src="js/forms.js?v=20260929_1740"></script>
-  <script src="js/share.js?v=20260929_1740"></script>
-  <script src="js/app.js?v=20260929_1740"></script>
+  <script src="js/icons.js?v=20260929_1750"></script>
+  <script src="js/db.js?v=20260929_1750"></script>
+  <script src="js/expense.js?v=20260929_1750"></script>
+  <script src="js/store.js?v=20260929_1750"></script>
+  <script src="js/geocoder.js?v=20260929_1750"></script>
+  <script src="js/map.js?v=20260929_1750"></script>
+  <script src="js/forms.js?v=20260929_1750"></script>
+  <script src="js/share.js?v=20260929_1750"></script>
+  <script src="js/app.js?v=20260929_1750"></script>
 </body>
 </html>
