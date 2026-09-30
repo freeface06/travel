@@ -1,4 +1,4 @@
-/// @intent 여행 계획 중앙 상태 관리자(TripProvider) - 다중 여행 CRUD, 슬롯 후보 관리, 계정별 격리(bindUser/unbindUser) 및 클라우드 동기화
+/// @intent 여행 계획 중앙 상태 관리자(TripProvider) - 다중 여행 CRUD, 슬롯 후보 관리, 계정별 격리 및 동행자 공유/협업(TripSharing) 지원
 /// @agent Gemini/manager-develop
 /// @branch feat/v2.0.0-commercial
 /// @author @developer_name
@@ -13,6 +13,7 @@ import '../models/trip_metadata.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/storage_service.dart';
 import '../services/supabase_service.dart';
+import '../services/trip_sharing_service.dart';
 
 enum SyncStatus {
   synced,
@@ -25,6 +26,7 @@ class TripProvider extends ChangeNotifier {
   final StorageService _storageService;
   final SupabaseService _supabaseService;
   final CloudSyncService _cloudSyncService;
+  final TripSharingService _tripSharingService;
   final Uuid _uuid = const Uuid();
 
   List<Trip> _trips = [Trip.defaultTrip()];
@@ -43,9 +45,11 @@ class TripProvider extends ChangeNotifier {
     StorageService? storageService,
     SupabaseService? supabaseService,
     CloudSyncService? cloudSyncService,
+    TripSharingService? tripSharingService,
   })  : _storageService = storageService ?? StorageService(),
         _supabaseService = supabaseService ?? SupabaseService(),
-        _cloudSyncService = cloudSyncService ?? CloudSyncService() {
+        _cloudSyncService = cloudSyncService ?? CloudSyncService(),
+        _tripSharingService = tripSharingService ?? TripSharingService() {
     init();
   }
 
@@ -58,6 +62,11 @@ class TripProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get currentUserId => _currentUserId;
   SyncStatus get syncStatus => _syncStatus;
+  TripSharingService get tripSharingService => _tripSharingService;
+
+  bool get isCurrentTripShared => currentTrip.metadata.isShared;
+  String get currentTripRole => currentTrip.metadata.currentUserRole(_currentUserId);
+  bool get canEditCurrentTrip => currentTrip.metadata.canUserEdit(_currentUserId);
   bool get isCloudSyncEnabled =>
       _currentUserId != null &&
       _currentUserId!.isNotEmpty &&
@@ -689,5 +698,123 @@ class TripProvider extends ChangeNotifier {
     notifyListeners();
 
     return finalCandidate;
+  }
+
+  /// 현재 여행의 초대 코드 조회 또는 생성
+  Future<String> getOrGenerateInviteCode(String tripId, {String? ownerName}) async {
+    final idx = _trips.indexWhere((t) => t.metadata.id == tripId);
+    if (idx == -1) return '';
+
+    final trip = _trips[idx];
+    final code = await _tripSharingService.generateInviteCode(
+      trip,
+      ownerId: _currentUserId,
+      ownerName: ownerName,
+    );
+
+    // 갱신된 메타데이터 로컬 반영
+    if (_trips[idx].metadata.inviteCode != code) {
+      _trips[idx] = _trips[idx].copyWith(
+        metadata: _trips[idx].metadata.copyWith(
+          inviteCode: code,
+          ownerId: _trips[idx].metadata.ownerId.isNotEmpty
+              ? _trips[idx].metadata.ownerId
+              : (_currentUserId ?? ''),
+          ownerName: _trips[idx].metadata.ownerName.isNotEmpty
+              ? _trips[idx].metadata.ownerName
+              : (ownerName ?? '호스트 여행자'),
+        ),
+      );
+      await _persist();
+      notifyListeners();
+    }
+    return code;
+  }
+
+  /// 초대 코드로 여행 조회 (미리보기용)
+  Future<Trip?> previewTripByInviteCode(String inviteCode) async {
+    return await _tripSharingService.getTripByInviteCode(inviteCode);
+  }
+
+  /// 초대 코드로 여행 참여 및 내 여행 목록에 추가/전환
+  Future<bool> joinTripByInviteCode(
+    String inviteCode, {
+    String? userEmail,
+    String? userDisplayName,
+  }) async {
+    final userId = _currentUserId ?? 'guest-local-user';
+    final email = userEmail ?? 'traveler@mytriplog.com';
+    final displayName = userDisplayName ?? '동행자';
+
+    final joinedTrip = await _tripSharingService.joinTripWithInviteCode(
+      inviteCode: inviteCode,
+      userId: userId,
+      email: email,
+      displayName: displayName,
+    );
+
+    if (joinedTrip == null) return false;
+
+    // 내 여행 목록에 추가 또는 갱신
+    final existingIdx = _trips.indexWhere((t) => t.metadata.id == joinedTrip.metadata.id);
+    if (existingIdx != -1) {
+      _trips[existingIdx] = joinedTrip;
+    } else {
+      _trips.add(joinedTrip);
+    }
+
+    _currentTripId = joinedTrip.metadata.id;
+    _selectedDay = 1;
+    _selectedItemId = null;
+    await _persist();
+    notifyListeners();
+    return true;
+  }
+
+  /// 참여자 권한 변경
+  Future<bool> updateMemberRole(String targetUserId, String newRole) async {
+    final tripIdx = _trips.indexWhere((t) => t.metadata.id == _currentTripId);
+    if (tripIdx == -1) return false;
+
+    try {
+      final updated = _tripSharingService.updateMemberRole(
+        trip: _trips[tripIdx],
+        targetUserId: targetUserId,
+        newRole: newRole,
+        requestUserId: _currentUserId ?? '',
+      );
+      _trips[tripIdx] = updated;
+      await _persist();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 참여자 추방 / 탈퇴
+  Future<bool> removeMember(String targetUserId) async {
+    final tripIdx = _trips.indexWhere((t) => t.metadata.id == _currentTripId);
+    if (tripIdx == -1) return false;
+
+    try {
+      final updated = _tripSharingService.removeMember(
+        trip: _trips[tripIdx],
+        targetUserId: targetUserId,
+        requestUserId: _currentUserId ?? '',
+      );
+
+      // 만약 내가 탈퇴한 경우 내 목록에서 여행 삭제
+      if (targetUserId == _currentUserId) {
+        return deleteTrip(_currentTripId);
+      }
+
+      _trips[tripIdx] = updated;
+      await _persist();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 }

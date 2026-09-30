@@ -1,7 +1,7 @@
 /*
- * @intent 다중 여행 계획 관리(목록/전환/생성/복제/삭제/초기화) 및 계획 한눈에 비교 UI/UX 개선 모달 다이얼로그
+ * @intent 다중 여행 계획 관리(목록/전환/생성/복제/삭제/초기화), 계획 비교 및 초대 코드를 통한 여행 참여/공유 모달 다이얼로그
  * @agent  Gemini/manager-develop
- * @branch feat/mytriplog-core
+ * @branch feat/v2.0.0-commercial
  * @author @developer_name
  * @date   2026-09-30
  */
@@ -17,6 +17,8 @@ import '../../services/expense_calculator.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_dialog.dart';
 import '../widgets/app_menu_divider.dart';
+import 'trip_join_dialog.dart';
+import 'trip_share_dialog.dart';
 
 class TripManagerDialog extends StatefulWidget {
   const TripManagerDialog({super.key});
@@ -268,6 +270,7 @@ class _TripManagerDialogState extends State<TripManagerDialog> {
 
   /// 1) 계획 목록 탭
   Widget _buildTripListTab(BuildContext context, List<Trip> trips, String currentTripId) {
+    final provider = context.watch<TripProvider>();
     return Column(
       children: [
         // 상단 액션 바 (화면 너비에 유연하게 반응하는 Wrap)
@@ -277,16 +280,37 @@ class _TripManagerDialogState extends State<TripManagerDialog> {
           alignment: WrapAlignment.spaceBetween,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            ElevatedButton.icon(
-              onPressed: () => _createNewTrip(context),
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('새 계획 만들기'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () => _createNewTrip(context),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('새 계획 만들기'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (_) => const TripJoinDialog(),
+                    );
+                  },
+                  icon: const Icon(Icons.group_add_outlined, size: 16, color: AppTheme.primary),
+                  label: const Text('초대 코드로 참여', style: TextStyle(color: AppTheme.primary, fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppTheme.primary),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                ),
+              ],
             ),
             OutlinedButton.icon(
               onPressed: () => _confirmClearItems(context),
@@ -377,6 +401,58 @@ class _TripManagerDialogState extends State<TripManagerDialog> {
                               ],
                             ),
                           ),
+                        if (trip.metadata.ownerId.isNotEmpty &&
+                            provider.currentUserId != null &&
+                            trip.metadata.ownerId != provider.currentUserId)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            margin: const EdgeInsets.only(right: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF0FDF4),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFBBF7D0)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.group_outlined, size: 12, color: Color(0xFF16A34A)),
+                                const SizedBox(width: 3),
+                                Text(
+                                  '공유받음 (${trip.metadata.ownerName.isNotEmpty ? trip.metadata.ownerName : '호스트'})',
+                                  style: const TextStyle(
+                                    color: Color(0xFF15803D),
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else if (trip.metadata.isShared)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            margin: const EdgeInsets.only(right: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEFF6FF),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFBFDBFE)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.share_outlined, size: 12, color: AppTheme.primary),
+                                const SizedBox(width: 3),
+                                Text(
+                                  '공유 중 (${trip.metadata.members.length + 1}명)',
+                                  style: const TextStyle(
+                                    color: AppTheme.primaryDark,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         Expanded(
                           child: Text(
                             trip.metadata.title,
@@ -408,6 +484,13 @@ class _TripManagerDialogState extends State<TripManagerDialog> {
                           onSelected: (action) async {
                             if (action == 'switch') {
                               context.read<TripProvider>().switchTrip(trip.metadata.id);
+                            } else if (action == 'share') {
+                              // 대상 여행으로 먼저 전환 후 공유 다이얼로그 호출
+                              context.read<TripProvider>().switchTrip(trip.metadata.id);
+                              showDialog(
+                                context: context,
+                                builder: (_) => const TripShareDialog(),
+                              );
                             } else if (action == 'duplicate') {
                               context.read<TripProvider>().duplicateTrip(trip.metadata.id);
                             } else if (action == 'delete') {
@@ -425,6 +508,36 @@ class _TripManagerDialogState extends State<TripManagerDialog> {
                             }
                           },
                           itemBuilder: (ctx) => [
+                            PopupMenuItem(
+                              value: 'share',
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 28,
+                                    height: 28,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFEFF6FF),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(
+                                      Icons.share_rounded,
+                                      size: 16,
+                                      color: AppTheme.primary,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  const Text(
+                                    '여행 공유 (초대 코드)',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF1E293B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const AppMenuDivider(),
                             if (!isCurrent) ...[
                               PopupMenuItem(
                                 value: 'switch',

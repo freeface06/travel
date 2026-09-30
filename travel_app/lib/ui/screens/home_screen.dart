@@ -15,6 +15,7 @@ import '../../providers/trip_provider.dart';
 import '../dialogs/item_edit_dialog.dart';
 import '../dialogs/trip_manager_dialog.dart';
 import '../dialogs/trip_settings_dialog.dart';
+import '../dialogs/trip_share_dialog.dart';
 import '../tabs/expense_tab.dart';
 import '../tabs/map_tab.dart';
 import '../tabs/timeline_tab.dart';
@@ -387,6 +388,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       context: context,
                       builder: (_) => const TripSettingsDialog(),
                     );
+                  } else if (value == 'share') {
+                    showDialog(
+                      context: context,
+                      builder: (_) => const TripShareDialog(),
+                    );
                   } else if (value == 'manage') {
                     showDialog(
                       context: context,
@@ -525,6 +531,37 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(width: 10),
                         const Text(
                           '여행 정보 수정',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const AppMenuDivider(),
+                  PopupMenuItem(
+                    value: 'share',
+                    height: 44,
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(
+                            Icons.share_rounded,
+                            size: 16,
+                            color: AppTheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        const Text(
+                          '여행 공유 및 동행자 관리',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -827,6 +864,10 @@ class _HomeScreenState extends State<HomeScreen> {
               }
               break;
             case 2: // 추가 탭
+              if (!provider.canEditCurrentTrip) {
+                AppToast.warning(context, '이 여행은 뷰어(읽기 전용) 권한으로 참여 중이므로 일정을 추가할 수 없습니다.');
+                break;
+              }
               ItemEditDialog.show(context);
               break;
             case 3: // 경비 탭
