@@ -1,7 +1,7 @@
 /*
- * @intent 메인 홈 화면 - 지도 1층, Day 칩 플로팅 2층, DraggableScrollableSheet 타임라인 3층의 인터랙티브 반응형 구조
+ * @intent 메인 홈 화면 - 지도 1층, Day 칩 플로팅 2층, DraggableScrollableSheet 타임라인 3층의 인터랙티브 반응형 구조 및 계정 프로필 연동
  * @agent  Gemini/manager-develop
- * @branch feat/flutter-migration
+ * @branch feat/v2.0.0-commercial
  * @author @developer_name
  * @date   2026-09-30
  */
@@ -10,6 +10,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/trip_item.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/trip_provider.dart';
 import '../dialogs/item_edit_dialog.dart';
 import '../dialogs/trip_manager_dialog.dart';
@@ -20,6 +21,7 @@ import '../tabs/timeline_tab.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_menu_divider.dart';
 import '../widgets/app_toast.dart';
+import 'login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -281,92 +283,268 @@ class _HomeScreenState extends State<HomeScreen> {
                     }
                   },
           ),
-          PopupMenuButton<String>(
-            tooltip: '더보기 메뉴',
-            elevation: 6,
-            shadowColor: const Color(0x1E0F172A),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: const BorderSide(color: Color(0xFFE2E8F0)),
-            ),
-            offset: const Offset(0, 44),
-            icon: const Icon(Icons.more_vert),
-            onSelected: (value) {
-              if (value == 'edit') {
-                showDialog(
-                  context: context,
-                  builder: (_) => const TripSettingsDialog(),
-                );
-              } else if (value == 'manage') {
-                showDialog(
-                  context: context,
-                  builder: (_) => const TripManagerDialog(),
-                );
-              }
+          Consumer<AuthProvider>(
+            builder: (context, authProvider, _) {
+              return PopupMenuButton<String>(
+                tooltip: '계정 및 더보기 메뉴',
+                elevation: 6,
+                shadowColor: const Color(0x1E0F172A),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                offset: const Offset(0, 44),
+                icon: const Icon(Icons.more_vert),
+                onSelected: (value) async {
+                  if (value == 'edit') {
+                    showDialog(
+                      context: context,
+                      builder: (_) => const TripSettingsDialog(),
+                    );
+                  } else if (value == 'manage') {
+                    showDialog(
+                      context: context,
+                      builder: (_) => const TripManagerDialog(),
+                    );
+                  } else if (value == 'login') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const LoginScreen(),
+                      ),
+                    );
+                  } else if (value == 'logout') {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        title: const Text(
+                          '로그아웃',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        ),
+                        content: const Text('현재 계정에서 로그아웃하시겠습니까?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text(
+                              '취소',
+                              style: TextStyle(color: AppTheme.textSecondary),
+                            ),
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFEF4444),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('로그아웃'),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirmed == true && context.mounted) {
+                      await authProvider.signOut();
+                      if (context.mounted) {
+                        AppToast.info(context, '로그아웃되었습니다.');
+                      }
+                    }
+                  }
+                },
+                itemBuilder: (context) => [
+                  // 상단 계정 정보 헤더
+                  PopupMenuItem<String>(
+                    enabled: false,
+                    height: 52,
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 16,
+                          backgroundColor: authProvider.isGuestMode
+                              ? const Color(0xFF64748B)
+                              : AppTheme.primary,
+                          child: Icon(
+                            authProvider.isGuestMode
+                                ? Icons.person_outline
+                                : Icons.flight_takeoff,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                authProvider.displayName ?? '여행자',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1E293B),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                authProvider.isGuestMode
+                                    ? '오프라인 게스트 모드'
+                                    : (authProvider.email ?? ''),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: authProvider.isGuestMode
+                                      ? const Color(0xFFD97706)
+                                      : AppTheme.textSecondary,
+                                  fontWeight: authProvider.isGuestMode
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const AppMenuDivider(),
+                  PopupMenuItem(
+                    value: 'edit',
+                    height: 44,
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(
+                            Icons.tune_rounded,
+                            size: 16,
+                            color: AppTheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        const Text(
+                          '여행 정보 수정',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const AppMenuDivider(),
+                  PopupMenuItem(
+                    value: 'manage',
+                    height: 44,
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEEF2FF),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(
+                            Icons.folder_copy_outlined,
+                            size: 16,
+                            color: Color(0xFF4F46E5),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        const Text(
+                          '여행 계획 목록 및 비교',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const AppMenuDivider(),
+                  if (authProvider.isGuestMode)
+                    PopupMenuItem(
+                      value: 'login',
+                      height: 44,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEFF6FF),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Icon(
+                              Icons.login_rounded,
+                              size: 16,
+                              color: AppTheme.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          const Text(
+                            '계정 로그인 / 회원가입',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    PopupMenuItem(
+                      value: 'logout',
+                      height: 44,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF2F2),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Icon(
+                              Icons.logout_rounded,
+                              size: 16,
+                              color: Color(0xFFEF4444),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          const Text(
+                            '로그아웃',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFFEF4444),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              );
             },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'edit',
-                height: 44,
-                child: Row(
-                  children: [
-                    Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEFF6FF),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Icon(
-                        Icons.tune_rounded,
-                        size: 16,
-                        color: AppTheme.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    const Text(
-                      '여행 정보 수정',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1E293B),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const AppMenuDivider(),
-              PopupMenuItem(
-                value: 'manage',
-                height: 44,
-                child: Row(
-                  children: [
-                    Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEEF2FF),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Icon(
-                        Icons.folder_copy_outlined,
-                        size: 16,
-                        color: Color(0xFF4F46E5),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    const Text(
-                      '여행 계획 목록 및 비교',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1E293B),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ),
           const SizedBox(width: 4),
         ],

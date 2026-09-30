@@ -1,18 +1,59 @@
-/// @intent Supabase 클라우드 REST API 기반 여행 데이터 및 이미지 스토리지 동기화 서비스 (Modified: 버킷 내 개별 사진 파일 원격 삭제 deletePhoto API 추가)
+/// @intent Supabase 클라우드 클라이언트 초기화(Safe Fallback), 인증 및 REST/스토리지 동기화 서비스
 /// @agent Gemini/manager-develop
-/// @branch feat/flutter-migration
+/// @branch feat/v2.0.0-commercial
 /// @author @developer_name
 /// @date 2026-09-30
 library;
 
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/trip.dart';
 
 class SupabaseService {
   static const String defaultUrl = 'https://qmqklwelrsmlsrmtnsxt.supabase.co';
   static const String defaultAnonKey = 'sb_publishable_Gz-4w0mexqsHUTaNl6AtDw_b9W1nddm';
+
+  static bool _isInitialized = false;
+
+  /// Supabase SDK 초기화 여부
+  static bool get isInitialized => _isInitialized;
+
+  /// SupabaseClient 인스턴스 (초기화되지 않은 경우 null 안전 반환)
+  static SupabaseClient? get client {
+    if (!_isInitialized) return null;
+    try {
+      return Supabase.instance.client;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Supabase 클라이언트 안전 초기화 (Safe Fallback)
+  static Future<void> initialize({String? url, String? anonKey}) async {
+    final targetUrl = url ?? defaultUrl;
+    final targetKey = anonKey ?? defaultAnonKey;
+
+    if (targetUrl.isEmpty || targetKey.isEmpty) {
+      _isInitialized = false;
+      return;
+    }
+
+    try {
+      await Supabase.initialize(
+        url: targetUrl,
+        // ignore: deprecated_member_use
+        anonKey: targetKey,
+        debug: kDebugMode,
+      );
+      _isInitialized = true;
+    } catch (e) {
+      // 키 불일치, 네트워크 장애, 테스트 환경 등에서도 크래시 없이 안전하게 Fallback 모드로 작동
+      debugPrint('[SupabaseService] 초기화 안전 건너뜀 (Fallback): $e');
+      _isInitialized = false;
+    }
+  }
 
   final String url;
   final String anonKey;
