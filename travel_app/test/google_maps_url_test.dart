@@ -91,4 +91,39 @@ void main() {
     expect(result.lat, closeTo(-8.7436, 0.01));
     expect(result.lng, closeTo(115.1710, 0.01));
   });
+
+  test('Test GeocodingService resolveLocation with tVhyKqK4EnbdRuGP8 (Kos Bulan Bali clean name & pin)', () async {
+    final service = GeocodingService();
+    final result = await service.resolveLocation('https://maps.app.goo.gl/tVhyKqK4EnbdRuGP8?g_st=ac');
+    // ignore: avoid_print
+    print('RESOLVED RESULT 5 (tVhyKqK4EnbdRuGP8): $result');
+    expect(result, isNotNull);
+    expect(result!.name, equals('Kos Bulan Bali'));
+    expect(result.lat, closeTo(-8.7547172, 0.001));
+    expect(result.lng, closeTo(115.1747161, 0.001));
+    expect(result.address, isNotNull);
+  });
+
+  test('Test GeocodingService parseDmsCoordinates and DMS input in parseLocationDetails', () {
+    final dms = GeocodingService.parseDmsCoordinates('8°45\'17.0"S 115°10\'29.0"E');
+    expect(dms, isNotNull);
+    expect(dms!.lat, closeTo(-8.754722, 0.001));
+    expect(dms.lng, closeTo(115.174722, 0.001));
+
+    final parsed = GeocodingService.parseLocationDetails('Kos Bulan Bali 8°45\'17.0"S 115°10\'29.0"E');
+    expect(parsed, isNotNull);
+    expect(parsed!.lat, closeTo(-8.754722, 0.001));
+    expect(parsed.lng, closeTo(115.174722, 0.001));
+  });
+
+  test('Test GeocodingService resolveLocation with direct FTID', () async {
+    final service = GeocodingService();
+    final result = await service.resolveLocation('0x2dd245bc9ad2803f:0xa39c8c07d272ed82');
+    // ignore: avoid_print
+    print('RESOLVED RESULT 6 (Direct FTID): $result');
+    expect(result, isNotNull);
+    expect(result!.name, equals('Kos Bulan Bali'));
+    expect(result.lat, closeTo(-8.7547172, 0.0001));
+    expect(result.lng, closeTo(115.1747161, 0.0001));
+  });
 }

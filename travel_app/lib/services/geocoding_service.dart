@@ -51,6 +51,8 @@ class ParsedLocation {
   final double lng;
   final String? address;
   final String? sourceUrl;
+  final String? placeId;
+  final List<String> photos;
 
   const ParsedLocation({
     this.name,
@@ -58,14 +60,68 @@ class ParsedLocation {
     required this.lng,
     this.address,
     this.sourceUrl,
+    this.placeId,
+    this.photos = const [],
   });
 
   @override
-  String toString() => 'ParsedLocation(name: $name, lat: $lat, lng: $lng, address: $address, source: $sourceUrl)';
+  String toString() => 'ParsedLocation(name: $name, lat: $lat, lng: $lng, address: $address, placeId: $placeId, source: $sourceUrl)';
 }
 
 class GeocodingService {
   static const String nominatimBase = 'https://nominatim.openstreetmap.org';
+
+  /// DMS (도/분/초) 좌표 문자열 파싱 (예: 37°33'59.4"N 126°58'40.8"E 또는 8°45'17.0"S 115°10'29.0"E)
+  static ({double lat, double lng})? parseDmsCoordinates(String input) {
+    try {
+      final dmsPattern = RegExp(
+        r'''(\d{1,2})[°\s]+(\d{1,2})['′\s]+(\d{1,2}(?:\.\d+)?)["″\s]*([NSns])[\s,]+(\d{1,3})[°\s]+(\d{1,2})['′\s]+(\d{1,2}(?:\.\d+)?)["″\s]*([EWew])''',
+      );
+      final match = dmsPattern.firstMatch(input);
+      if (match != null) {
+        final latDeg = double.parse(match.group(1)!);
+        final latMin = double.parse(match.group(2)!);
+        final latSec = double.parse(match.group(3)!);
+        final latDir = match.group(4)!.toUpperCase();
+
+        final lngDeg = double.parse(match.group(5)!);
+        final lngMin = double.parse(match.group(6)!);
+        final lngSec = double.parse(match.group(7)!);
+        final lngDir = match.group(8)!.toUpperCase();
+
+        double lat = latDeg + (latMin / 60.0) + (latSec / 3600.0);
+        if (latDir == 'S') lat = -lat;
+
+        double lng = lngDeg + (lngMin / 60.0) + (lngSec / 3600.0);
+        if (lngDir == 'W') lng = -lng;
+
+        if (lat >= -90.0 && lat <= 90.0 && lng >= -180.0 && lng <= 180.0) {
+          return (lat: lat, lng: lng);
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// 구글맵 URL 또는 텍스트에서 Google Feature ID (ftid: 0x...:0x...) 추출
+  static String? extractFtid(String text) {
+    final m1 = RegExp(r'!1s(0x[0-9a-fA-F]+:0x[0-9a-fA-F]+)').firstMatch(text);
+    if (m1 != null) return m1.group(1);
+
+    final m2 = RegExp(r'[?&]ftid=(0x[0-9a-fA-F]+:0x[0-9a-fA-F]+)').firstMatch(text);
+    if (m2 != null) return m2.group(1);
+
+    final m3 = RegExp(r'(0x[0-9a-fA-F]{10,20}:0x[0-9a-fA-F]{10,20})').firstMatch(text);
+    if (m3 != null) return m3.group(1);
+
+    return null;
+  }
+
+  /// 구글맵 URL 또는 텍스트에서 Google Place ID (place_id) 추출
+  static String? extractPlaceId(String text) {
+    final m = RegExp(r'[?&]place_id=([A-Za-z0-9_-]{20,})').firstMatch(text);
+    return m?.group(1);
+  }
 
   /// URL, 좌표 또는 구글맵 공유 텍스트인지 판별
   static bool isUrlOrCoordinates(String? input) {
@@ -76,6 +132,8 @@ class GeocodingService {
     if (text.contains('google.') && text.contains('/maps')) return true;
     if (RegExp(r'!3d-?\d+\.\d+!4d-?\d+\.\d+').hasMatch(text)) return true;
     if (RegExp(r'@-?\d+\.\d+,\s*-?\d+\.\d+').hasMatch(text)) return true;
+    if (extractFtid(text) != null || extractPlaceId(text) != null) return true;
+    if (parseDmsCoordinates(text) != null) return true;
     
     // 일반 위도/경도 숫자 쌍 검사
     final cleaned = text.replaceAll('(', '').replaceAll(')', '').trim();
@@ -146,7 +204,7 @@ class GeocodingService {
           final decoded = Uri.decodeComponent(raw.replaceAll('+', ' ')).trim();
           if (decoded.isNotEmpty) {
             final splitMatch = RegExp(
-              r'^(.*?)(?:\s+(Jl\.|Jalan|Street|St\.|Road|Rd\.|Avenue|Ave\.|Blvd\.|Way|\bNo\.\b)|,(.*)$)',
+              r'^(.*?)(?:\s+(Jl[:\.]|Jalan|Gang|Gg\.|Street|St\.|Road|Rd\.|Avenue|Ave\.|Blvd\.|Way|\bNo\.\b)|,(.*)$)',
               caseSensitive: false,
             ).firstMatch(decoded);
             if (splitMatch != null) {
@@ -192,7 +250,8 @@ class GeocodingService {
         } catch (_) {}
       }
 
-      // 5. 구글맵 중심점 좌표 (@lat,lng)
+      // 5. 구글맵 중심점/좌표 (@lat,lng)
+      // 데스크톱 구글맵 웹 브라우저 URL의 핵심 좌표 포맷 지원
       if (lat == null || lng == null) {
         final centerMatch = RegExp(r'@(-?\d+\.\d+),(-?\d+\.\d+)').firstMatch(url);
         if (centerMatch != null) {
@@ -202,27 +261,37 @@ class GeocodingService {
       }
     }
 
-    // URL이 없거나 URL 내에서 좌표를 추출하지 못한 경우 일반 좌표 문자열 파싱
+    // URL이 없거나 URL 내에서 좌표를 추출하지 못한 경우 일반 좌표 및 DMS 도/분/초 문자열 파싱
     if (lat == null || lng == null) {
-      final clean = trimmed
-          .replaceAll('(', '')
-          .replaceAll(')', '')
-          .replaceAll('@', ' ')
-          .trim();
+      final dms = parseDmsCoordinates(trimmed);
+      if (dms != null) {
+        lat = dms.lat;
+        lng = dms.lng;
+      } else {
+        final clean = trimmed
+            .replaceAll('(', '')
+            .replaceAll(')', '')
+            .replaceAll('@', ' ')
+            .trim();
 
-      final coordMatch = RegExp(r'(-?\d{1,2}(?:\.\d+)?)[,\s/]+(-?\d{1,3}(?:\.\d+)?)').firstMatch(clean);
-      if (coordMatch != null) {
-        final cLat = double.tryParse(coordMatch.group(1)!);
-        final cLng = double.tryParse(coordMatch.group(2)!);
-        if (cLat != null && cLng != null && cLat >= -90.0 && cLat <= 90.0 && cLng >= -180.0 && cLng <= 180.0) {
-          lat = cLat;
-          lng = cLng;
+        final coordMatch = RegExp(r'(-?\d{1,2}(?:\.\d+)?)[,\s/]+(-?\d{1,3}(?:\.\d+)?)').firstMatch(clean);
+        if (coordMatch != null) {
+          final cLat = double.tryParse(coordMatch.group(1)!);
+          final cLng = double.tryParse(coordMatch.group(2)!);
+          if (cLat != null && cLng != null && cLat >= -90.0 && cLat <= 90.0 && cLng >= -180.0 && cLng <= 180.0) {
+            lat = cLat;
+            lng = cLng;
 
-          final before = clean.substring(0, coordMatch.start).trim();
-          final after = clean.substring(coordMatch.end).trim();
-          final leftover = [before, after].where((s) => s.isNotEmpty).join(' ').trim();
-          if (leftover.isNotEmpty && leftover != clean) {
-            prefixName ??= leftover;
+            final before = clean.substring(0, coordMatch.start).trim();
+            final after = clean.substring(coordMatch.end).trim();
+            final leftover = [before, after].where((s) => s.isNotEmpty).join(' ').trim();
+            if (leftover.isNotEmpty &&
+                leftover != clean &&
+                !leftover.contains('http://') &&
+                !leftover.contains('https://') &&
+                !leftover.contains('google.com')) {
+              prefixName ??= leftover;
+            }
           }
         }
       }
@@ -230,7 +299,14 @@ class GeocodingService {
 
     if (lat != null && lng != null) {
       if (lat >= -90.0 && lat <= 90.0 && lng >= -180.0 && lng <= 180.0) {
-        final finalName = prefixName ?? placeName;
+        String? finalName = prefixName;
+        if (finalName != null &&
+            (finalName.contains('http://') ||
+             finalName.contains('https://') ||
+             finalName.contains('google.com'))) {
+          finalName = null;
+        }
+        finalName ??= placeName;
         return ParsedLocation(
           name: finalName,
           lat: lat,
@@ -254,8 +330,25 @@ class GeocodingService {
   }
 
   /// 단축 URL (maps.app.goo.gl 등) 리다이렉트 추적 및 위치 정밀 파싱
-  Future<ParsedLocation?> resolveLocation(String input) async {
+  Future<ParsedLocation?> resolveLocation(String input, {http.Client? client}) async {
     debugPrint('[Geocoding] resolveLocation called with: "$input"');
+
+    // 0순위: 입력 문자열 자체에서 Google Feature ID(ftid: 0x...:0x...) 또는 Place ID(place_id) 감지 시 즉시 공식 API로 100% 정밀 조회
+    final directFtid = extractFtid(input);
+    final directPlaceId = extractPlaceId(input);
+    if (directFtid != null || directPlaceId != null) {
+      final byId = await _fetchPlaceDetailsById(
+        ftid: directFtid,
+        placeId: directPlaceId,
+        sourceUrl: input,
+        client: client,
+      );
+      if (byId != null) {
+        debugPrint('[Geocoding] Resolved directly via FTID/PlaceID from input: $byId');
+        return byId;
+      }
+    }
+
     final direct = parseLocationDetails(input);
     if (direct != null) {
       debugPrint('[Geocoding] direct parse success: lat=${direct.lat}, lng=${direct.lng}, name=${direct.name}');
@@ -331,16 +424,27 @@ class GeocodingService {
 
     String? placeNameFromPath;
     String? addressFromPath;
+    double? cameraLat;
+    double? cameraLng;
 
-    final client = HttpClient();
-    client.connectionTimeout = const Duration(seconds: 8);
-    client.badCertificateCallback = (cert, host, port) => true;
+    void extractCameraPos(String urlStr) {
+      final camMatch = RegExp(r'@(-?\d+\.\d+),(-?\d+\.\d+)').firstMatch(urlStr);
+      if (camMatch != null) {
+        cameraLat ??= double.tryParse(camMatch.group(1)!);
+        cameraLng ??= double.tryParse(camMatch.group(2)!);
+      }
+    }
+
+    final httpClient = HttpClient();
+    httpClient.connectionTimeout = const Duration(seconds: 8);
+    httpClient.badCertificateCallback = (cert, host, port) => true;
 
     try {
       String currentUrl = rawUrl;
       int redirectCount = 0;
 
       void checkPathInfo(String urlStr) {
+        extractCameraPos(urlStr);
         final placePathMatch = RegExp(r'/place/([^/@?#]+)').firstMatch(urlStr);
         if (placePathMatch != null) {
           try {
@@ -348,7 +452,7 @@ class GeocodingService {
             final decoded = Uri.decodeComponent(raw.replaceAll('+', ' ')).trim();
             if (decoded.isNotEmpty) {
               final splitMatch = RegExp(
-                r'^(.*?)(?:\s+(Jl\.|Jalan|Street|St\.|Road|Rd\.|Avenue|Ave\.|Blvd\.|Way|\bNo\.\b)|,(.*)$)',
+                r'^(.*?)(?:\s+(Jl[:\.]|Jalan|Gang|Gg\.|Street|St\.|Road|Rd\.|Avenue|Ave\.|Blvd\.|Way|\bNo\.\b)|,(.*)$)',
                 caseSensitive: false,
               ).firstMatch(decoded);
               if (splitMatch != null) {
@@ -366,13 +470,39 @@ class GeocodingService {
         debugPrint('[Geocoding] [Hop $redirectCount] Fetching: $currentUrl');
         checkPathInfo(currentUrl);
 
+        // 1순위: 현재 URL에서 FTID (0x...:0x...) 또는 Place ID 감지 시 즉시 공식 Place Details 조회!
+        final currentFtid = extractFtid(currentUrl);
+        final currentPlaceId = extractPlaceId(currentUrl);
+        if (currentFtid != null || currentPlaceId != null) {
+          final byId = await _fetchPlaceDetailsById(
+            ftid: currentFtid,
+            placeId: currentPlaceId,
+            sourceUrl: rawUrl,
+            client: client,
+          );
+          if (byId != null) {
+            debugPrint('[Geocoding] Resolved via currentUrl FTID/PlaceID: $byId');
+            return ParsedLocation(
+              name: (textNameCandidate != null && textNameCandidate.isNotEmpty)
+                  ? textNameCandidate
+                  : byId.name,
+              lat: byId.lat,
+              lng: byId.lng,
+              address: byId.address,
+              sourceUrl: rawUrl,
+              placeId: byId.placeId,
+              photos: byId.photos,
+            );
+          }
+        }
+
         final uri = Uri.tryParse(currentUrl);
         if (uri == null) {
           debugPrint('[Geocoding] Invalid URI: $currentUrl');
           break;
         }
 
-        final request = await client.getUrl(uri);
+        final request = await httpClient.getUrl(uri);
         request.followRedirects = false; // intent:// scheme 크래시를 방지하고 단계별 정밀 분석
         request.headers.set(
           HttpHeaders.userAgentHeader,
@@ -410,7 +540,33 @@ class GeocodingService {
 
           checkPathInfo(nextUrl);
 
-          // 리다이렉트 URL 자체에서 좌표 파싱 시도
+          // 1순위: 리다이렉트 Location 헤더에서 FTID 또는 Place ID 추출하여 즉시 공식 조회!
+          final locFtid = extractFtid(nextUrl);
+          final locPlaceId = extractPlaceId(nextUrl);
+          if (locFtid != null || locPlaceId != null) {
+            final byId = await _fetchPlaceDetailsById(
+              ftid: locFtid,
+              placeId: locPlaceId,
+              sourceUrl: nextUrl,
+              client: client,
+            );
+            if (byId != null) {
+              debugPrint('[Geocoding] Resolved via redirect Location FTID/PlaceID: $byId');
+              return ParsedLocation(
+                name: (textNameCandidate != null && textNameCandidate.isNotEmpty)
+                    ? textNameCandidate
+                    : byId.name,
+                lat: byId.lat,
+                lng: byId.lng,
+                address: byId.address,
+                sourceUrl: nextUrl,
+                placeId: byId.placeId,
+                photos: byId.photos,
+              );
+            }
+          }
+
+          // 리다이렉트 URL 자체에서 핀 좌표(!3d/!4d 또는 고정 좌표) 파싱 시도
           final parsedFromLoc = parseLocationDetails(nextUrl);
           if (parsedFromLoc != null) {
             debugPrint('[Geocoding] Resolved from redirect Location: $parsedFromLoc');
@@ -431,6 +587,21 @@ class GeocodingService {
               if (val != null) {
                 final decodedVal = Uri.decodeComponent(val);
                 debugPrint('[Geocoding] Checking nested param $param: $decodedVal');
+
+                final nestedFtid = extractFtid(decodedVal);
+                final nestedPlaceId = extractPlaceId(decodedVal);
+                if (nestedFtid != null || nestedPlaceId != null) {
+                  final byId = await _fetchPlaceDetailsById(
+                    ftid: nestedFtid,
+                    placeId: nestedPlaceId,
+                    sourceUrl: decodedVal,
+                    client: client,
+                  );
+                  if (byId != null) {
+                    return byId;
+                  }
+                }
+
                 final fromParam = parseLocationDetails(decodedVal);
                 if (fromParam != null) {
                   return ParsedLocation(
@@ -455,11 +626,46 @@ class GeocodingService {
           final body = await response.transform(utf8.decoder).join().timeout(const Duration(seconds: 4));
           debugPrint('[Geocoding] Read body length: ${body.length}');
 
+          // 본문 내 FTID 패턴 감지 (0x...:0x...)
+          final bodyFtid = extractFtid(body);
+          if (bodyFtid != null) {
+            final byId = await _fetchPlaceDetailsById(
+              ftid: bodyFtid,
+              sourceUrl: currentUrl,
+              client: client,
+            );
+            if (byId != null) {
+              debugPrint('[Geocoding] Resolved via body FTID: $byId');
+              return ParsedLocation(
+                name: (textNameCandidate != null && textNameCandidate.isNotEmpty)
+                    ? textNameCandidate
+                    : byId.name,
+                lat: byId.lat,
+                lng: byId.lng,
+                address: byId.address,
+                sourceUrl: currentUrl,
+                placeId: byId.placeId,
+                photos: byId.photos,
+              );
+            }
+          }
+
           // 메타 태그 검색 (og:url, og:image, itemprop 등)
           final metaMatches = RegExp(r'<meta[^>]+(?:content|itemprop)=["'']([^"'']+)["''][^>]*>').allMatches(body);
           for (final m in metaMatches) {
             final val = m.group(1);
             if (val != null && val.contains('google.com/maps')) {
+              final metaFtid = extractFtid(val);
+              if (metaFtid != null) {
+                final byId = await _fetchPlaceDetailsById(
+                  ftid: metaFtid,
+                  sourceUrl: val,
+                  client: client,
+                );
+                if (byId != null) {
+                  return byId;
+                }
+              }
               final fromMeta = parseLocationDetails(val);
               if (fromMeta != null) {
                 debugPrint('[Geocoding] Resolved from meta: $fromMeta');
@@ -473,7 +679,6 @@ class GeocodingService {
               }
             }
           }
-
 
           // 본문 내 핀 좌표 !3d / !4d
           final pinMatch = RegExp(r'!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)').firstMatch(body);
@@ -491,23 +696,6 @@ class GeocodingService {
               );
             }
           }
-
-          // 본문 내 /@lat,lng
-          final atMatch = RegExp(r'/@(-?\d+\.\d+),(-?\d+\.\d+)').firstMatch(body);
-          if (atMatch != null) {
-            final bLat = double.tryParse(atMatch.group(1)!);
-            final bLng = double.tryParse(atMatch.group(2)!);
-            if (bLat != null && bLng != null) {
-              debugPrint('[Geocoding] Resolved from body /@: $bLat, $bLng');
-              return ParsedLocation(
-                name: textNameCandidate ?? placeNameFromPath,
-                lat: bLat,
-                lng: bLng,
-                address: textAddressCandidate ?? addressFromPath,
-                sourceUrl: currentUrl,
-              );
-            }
-          }
         }
 
         break;
@@ -515,7 +703,7 @@ class GeocodingService {
     } catch (e, st) {
       debugPrint('[Geocoding] resolveLocation error: $e\n$st');
     } finally {
-      client.close();
+      httpClient.close();
     }
 
     // 최종 Fallback: URL 경로에서 추출된 주소/장소명 또는 텍스트 후보로 장소 검색
@@ -529,11 +717,19 @@ class GeocodingService {
     // 1단계: Google 공식 Places / Geocoding API 우선 조회 (정확도 99.9%)
     for (final candidate in searchCandidates) {
       if (candidate.length < 2) continue;
-      debugPrint('[Geocoding] Trying Google Places API for candidate: "$candidate"');
-      final googlePlaces = await _searchViaGooglePlaces(candidate, limit: 1);
+      debugPrint('[Geocoding] Trying Google Places API for candidate: "$candidate" (bias: $cameraLat, $cameraLng)');
+      final googlePlaces = await _searchViaGooglePlaces(
+        candidate,
+        limit: 1,
+        biasLat: cameraLat,
+        biasLng: cameraLng,
+        client: client,
+      );
       if (googlePlaces.isNotEmpty) {
         final first = googlePlaces.first;
-        final resolvedName = textNameCandidate ?? placeNameFromPath ?? first.name;
+        final resolvedName = (first.name.isNotEmpty && !first.name.contains('Jl.') && !first.name.contains('Gang'))
+            ? first.name
+            : (textNameCandidate ?? placeNameFromPath ?? first.name);
         final resolvedAddress = first.displayName.isNotEmpty ? first.displayName : (addressFromPath ?? textAddressCandidate);
         debugPrint('[Geocoding] Google Places API succeeded: $resolvedName (${first.lat}, ${first.lng})');
         return ParsedLocation(
@@ -545,7 +741,7 @@ class GeocodingService {
         );
       }
 
-      final googleGeocode = await _searchViaGoogleGeocoding(candidate, limit: 1);
+      final googleGeocode = await _searchViaGoogleGeocoding(candidate, limit: 1, client: client);
       if (googleGeocode.isNotEmpty) {
         final first = googleGeocode.first;
         final resolvedName = textNameCandidate ?? placeNameFromPath ?? first.name;
@@ -585,24 +781,104 @@ class GeocodingService {
     return null;
   }
 
-  /// 0. Google Places API (Find Place from Text) 공식 장소 검색 (정확도 최우선)
+  /// 0. Google Place Details API (ftid=0x... 또는 place_id=...) 공식 고유 식별자 직해 (정확도 100.0%)
+  Future<ParsedLocation?> _fetchPlaceDetailsById({
+    String? ftid,
+    String? placeId,
+    String? sourceUrl,
+    http.Client? client,
+  }) async {
+    if ((ftid == null || ftid.isEmpty) && (placeId == null || placeId.isEmpty)) {
+      return null;
+    }
+
+    final apiKey = await GooglePlacesService.getApiKey();
+    if (apiKey.isEmpty) return null;
+
+    final queryParams = <String, String>{
+      'fields': 'place_id,name,geometry,formatted_address,photos',
+      'language': 'ko',
+      'key': apiKey,
+    };
+    if (ftid != null && ftid.isNotEmpty) {
+      queryParams['ftid'] = ftid;
+    } else if (placeId != null && placeId.isNotEmpty) {
+      queryParams['place_id'] = placeId;
+    }
+
+    final url = Uri.https('maps.googleapis.com', '/maps/api/place/details/json', queryParams);
+
+    final httpClient = client ?? http.Client();
+    try {
+      final response = await httpClient.get(url).timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['status'] == 'OK' && data['result'] is Map) {
+          final res = data['result'];
+          final loc = res['geometry']?['location'];
+          if (loc is Map) {
+            final lat = (loc['lat'] as num?)?.toDouble() ?? 0.0;
+            final lng = (loc['lng'] as num?)?.toDouble() ?? 0.0;
+            final name = res['name'] as String? ?? '';
+            final addr = res['formatted_address'] as String? ?? '';
+            final pid = res['place_id'] as String? ?? '';
+            final List<String> photoRefs = [];
+            if (res['photos'] is List) {
+              for (final p in (res['photos'] as List)) {
+                final ref = p['photo_reference'] as String?;
+                if (ref != null && ref.isNotEmpty) {
+                  photoRefs.add(ref);
+                }
+              }
+            }
+            if (lat != 0.0 && lng != 0.0) {
+              return ParsedLocation(
+                name: name.isNotEmpty ? name : null,
+                lat: lat,
+                lng: lng,
+                address: addr.isNotEmpty ? addr : null,
+                sourceUrl: sourceUrl ?? '',
+                placeId: pid.isNotEmpty ? pid : null,
+                photos: photoRefs,
+              );
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[Geocoding] _fetchPlaceDetailsById error: $e');
+    } finally {
+      if (client == null) {
+        httpClient.close();
+      }
+    }
+    return null;
+  }
+
+  /// 0-1. Google Places API (Find Place from Text) 공식 장소 검색 (정확도 최우선)
   Future<List<PlaceSearchResult>> _searchViaGooglePlaces(
     String query, {
     int limit = 5,
+    double? biasLat,
+    double? biasLng,
     http.Client? client,
   }) async {
     final apiKey = await GooglePlacesService.getApiKey();
     if (apiKey.isEmpty) return [];
 
     final encoded = Uri.encodeComponent(query);
-    final url = Uri.parse(
-      'https://maps.googleapis.com/maps/api/place/findplacefromtext/json'
-      '?input=$encoded'
-      '&inputtype=textquery'
-      '&fields=place_id,name,formatted_address,geometry,types'
-      '&language=ko'
-      '&key=$apiKey',
-    );
+    var urlStr = 'https://maps.googleapis.com/maps/api/place/findplacefromtext/json'
+        '?input=$encoded'
+        '&inputtype=textquery'
+        '&fields=place_id,name,formatted_address,geometry,types'
+        '&language=ko'
+        '&key=$apiKey';
+
+    if (biasLat != null && biasLng != null) {
+      urlStr += '&locationbias=point:$biasLat,$biasLng';
+    }
+
+    final url = Uri.parse(urlStr);
 
     final httpClient = client ?? http.Client();
     try {
