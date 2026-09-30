@@ -40,13 +40,35 @@ class MyTripLogApp extends StatelessWidget {
   }
 }
 
-/// 인증 상태에 따라 HomeScreen vs LoginScreen 분기
-class AuthWrapper extends StatelessWidget {
+/// 인증 상태에 따라 HomeScreen vs LoginScreen 분기 및 TripProvider 계정 세션 자동 동기화
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  String? _lastBoundUserId;
+  bool _lastGuestMode = false;
+
+  void _syncUserBinding(AuthProvider auth) {
+    final effectiveUserId = auth.isGuestMode ? null : auth.userId;
+    if (_lastBoundUserId != effectiveUserId || _lastGuestMode != auth.isGuestMode) {
+      _lastBoundUserId = effectiveUserId;
+      _lastGuestMode = auth.isGuestMode;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          context.read<TripProvider>().bindUser(effectiveUserId);
+        }
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    _syncUserBinding(auth);
 
     switch (auth.status) {
       case AuthStatus.initial:

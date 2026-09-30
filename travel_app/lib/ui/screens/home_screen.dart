@@ -33,11 +33,61 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final DraggableScrollableController _sheetController = DraggableScrollableController();
   String _mapStyle = 'google_roadmap'; // 'google_roadmap' (일반) | 'google_satellite' (위성)
+  bool _checkedGuestMigration = false;
 
   @override
   void initState() {
     super.initState();
     _sheetController.addListener(_onSheetScroll);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _checkGuestMigrationPrompt();
+  }
+
+  Future<void> _checkGuestMigrationPrompt() async {
+    if (_checkedGuestMigration) return;
+    final auth = context.read<AuthProvider>();
+    final tripProvider = context.read<TripProvider>();
+
+    if (auth.isAuthenticated && !auth.isGuestMode) {
+      _checkedGuestMigration = true;
+      final hasGuestTrips = await tripProvider.hasGuestTripsToMigrate();
+      if (hasGuestTrips && mounted) {
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text('게스트 일정 동기화', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            content: const Text('게스트 모드에서 작성한 여행 일정이 있습니다.\n현재 계정으로 가져와 클라우드에 보관하시겠습니까?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('나중에', style: TextStyle(color: AppTheme.textSecondary)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('내 계정으로 가져오기'),
+              ),
+            ],
+          ),
+        );
+
+        if (confirm == true && mounted) {
+          final count = await tripProvider.migrateGuestTripsToUser();
+          if (mounted && count > 0) {
+            AppToast.success(context, '$count개의 여행 일정을 내 계정으로 가져왔습니다.');
+          }
+        }
+      }
+    }
   }
 
   @override
@@ -265,23 +315,59 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         actions: [
-          IconButton(
-            tooltip: '클라우드 동기화',
-            icon: provider.isSyncing
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
-                  )
-                : const Icon(Icons.cloud_sync_outlined),
-            onPressed: provider.isSyncing
-                ? null
-                : () async {
-                    await provider.syncFromCloud();
-                    if (context.mounted) {
-                      AppToast.info(context, provider.syncMessage);
-                    }
-                  },
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: provider.isSyncing
+                  ? null
+                  : () async {
+                      await provider.syncFromCloud();
+                      if (context.mounted) {
+                        AppToast.info(context, provider.syncMessage);
+                      }
+                    },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _getSyncBadgeBgColor(provider.syncStatus),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: _getSyncBadgeBorderColor(provider.syncStatus),
+                    width: 0.8,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (provider.isSyncing)
+                      const SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.8,
+                          color: AppTheme.primary,
+                        ),
+                      )
+                    else
+                      Icon(
+                        _getSyncBadgeIcon(provider.syncStatus),
+                        size: 13,
+                        color: _getSyncBadgeTextColor(provider.syncStatus),
+                      ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _getSyncBadgeLabel(provider.syncStatus),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: _getSyncBadgeTextColor(provider.syncStatus),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
           Consumer<AuthProvider>(
             builder: (context, authProvider, _) {
@@ -784,6 +870,71 @@ class _HomeScreenState extends State<HomeScreen> {
         return 3;
       default:
         return 1;
+    }
+  }
+
+  Color _getSyncBadgeBgColor(SyncStatus status) {
+    switch (status) {
+      case SyncStatus.synced:
+        return const Color(0xFFEFF6FF);
+      case SyncStatus.syncing:
+        return const Color(0xFFF0FDF4);
+      case SyncStatus.offline:
+        return const Color(0xFFFEF2F2);
+      case SyncStatus.localOnly:
+        return const Color(0xFFF8FAFC);
+    }
+  }
+
+  Color _getSyncBadgeBorderColor(SyncStatus status) {
+    switch (status) {
+      case SyncStatus.synced:
+        return const Color(0xFFBFDBFE);
+      case SyncStatus.syncing:
+        return const Color(0xFFBBF7D0);
+      case SyncStatus.offline:
+        return const Color(0xFFFECACA);
+      case SyncStatus.localOnly:
+        return const Color(0xFFE2E8F0);
+    }
+  }
+
+  Color _getSyncBadgeTextColor(SyncStatus status) {
+    switch (status) {
+      case SyncStatus.synced:
+        return AppTheme.primaryDark;
+      case SyncStatus.syncing:
+        return const Color(0xFF15803D);
+      case SyncStatus.offline:
+        return const Color(0xFFDC2626);
+      case SyncStatus.localOnly:
+        return const Color(0xFF64748B);
+    }
+  }
+
+  IconData _getSyncBadgeIcon(SyncStatus status) {
+    switch (status) {
+      case SyncStatus.synced:
+        return Icons.cloud_done_outlined;
+      case SyncStatus.syncing:
+        return Icons.cloud_sync_outlined;
+      case SyncStatus.offline:
+        return Icons.cloud_off_outlined;
+      case SyncStatus.localOnly:
+        return Icons.save_outlined;
+    }
+  }
+
+  String _getSyncBadgeLabel(SyncStatus status) {
+    switch (status) {
+      case SyncStatus.synced:
+        return '클라우드';
+      case SyncStatus.syncing:
+        return '동기화 중';
+      case SyncStatus.offline:
+        return '오프라인';
+      case SyncStatus.localOnly:
+        return '로컬 저장';
     }
   }
 

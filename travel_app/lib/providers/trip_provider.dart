@@ -1,6 +1,6 @@
-/// @intent 여행 계획 중앙 상태 관리자(TripProvider) - 다중 여행 CRUD 및 일정 후보/대안 플랜(Slot Grouping, selectCandidate) 지원
+/// @intent 여행 계획 중앙 상태 관리자(TripProvider) - 다중 여행 CRUD, 슬롯 후보 관리, 계정별 격리(bindUser/unbindUser) 및 클라우드 동기화
 /// @agent Gemini/manager-develop
-/// @branch feat/flutter-travel-app
+/// @branch feat/v2.0.0-commercial
 /// @author @developer_name
 /// @date 2026-09-30
 library;
@@ -10,12 +10,21 @@ import 'package:uuid/uuid.dart';
 import '../models/trip.dart';
 import '../models/trip_item.dart';
 import '../models/trip_metadata.dart';
+import '../services/cloud_sync_service.dart';
 import '../services/storage_service.dart';
 import '../services/supabase_service.dart';
+
+enum SyncStatus {
+  synced,
+  syncing,
+  offline,
+  localOnly,
+}
 
 class TripProvider extends ChangeNotifier {
   final StorageService _storageService;
   final SupabaseService _supabaseService;
+  final CloudSyncService _cloudSyncService;
   final Uuid _uuid = const Uuid();
 
   List<Trip> _trips = [Trip.defaultTrip()];
@@ -27,9 +36,16 @@ class TripProvider extends ChangeNotifier {
   bool _isSyncing = false;
   String _syncMessage = '';
 
-  TripProvider({StorageService? storageService, SupabaseService? supabaseService})
-      : _storageService = storageService ?? StorageService(),
-        _supabaseService = supabaseService ?? SupabaseService() {
+  String? _currentUserId;
+  SyncStatus _syncStatus = SyncStatus.localOnly;
+
+  TripProvider({
+    StorageService? storageService,
+    SupabaseService? supabaseService,
+    CloudSyncService? cloudSyncService,
+  })  : _storageService = storageService ?? StorageService(),
+        _supabaseService = supabaseService ?? SupabaseService(),
+        _cloudSyncService = cloudSyncService ?? CloudSyncService() {
     init();
   }
 
@@ -40,6 +56,14 @@ class TripProvider extends ChangeNotifier {
   String? get selectedItemId => _selectedItemId;
   String get activeTab => _activeTab;
   bool get isLoading => _isLoading;
+  String? get currentUserId => _currentUserId;
+  SyncStatus get syncStatus => _syncStatus;
+  bool get isCloudSyncEnabled =>
+      _currentUserId != null &&
+      _currentUserId!.isNotEmpty &&
+      _currentUserId != 'guest' &&
+      _currentUserId != 'guest-local-user' &&
+      _cloudSyncService.isCloudAvailable;
 
   Trip get currentTrip {
     return _trips.firstWhere(
@@ -87,14 +111,15 @@ class TripProvider extends ChangeNotifier {
   bool get isSyncing => _isSyncing;
   String get syncMessage => _syncMessage;
   SupabaseService get supabaseService => _supabaseService;
+  CloudSyncService get cloudSyncService => _cloudSyncService;
 
   // 초기화 및 로드
   Future<void> init() async {
     _isLoading = true;
     notifyListeners();
 
-    // 1. 로컬 SharedPreferences 우선 로드
-    final result = await _storageService.loadTrips();
+    // 1. 현재 사용자(또는 게스트) 로컬 저장소 우선 로드
+    final result = await _storageService.loadTrips(userId: _currentUserId);
     _trips = result.trips;
     _currentTripId = result.currentTripId;
     _selectedDay = 1;
@@ -106,42 +131,143 @@ class TripProvider extends ChangeNotifier {
     await syncFromCloud();
   }
 
+  /// 계정 로그인/전환 시 사용자 바인딩 (이전 사용자 데이터 메모리 완전 정화 및 격리 로드)
+  Future<void> bindUser(String? userId) async {
+    if (_currentUserId == userId && !_isLoading) {
+      return;
+    }
+
+    _isLoading = true;
+    notifyListeners();
+
+    // 이전 사용자 데이터 메모리에서 완전 정화(Clear)
+    _trips = [];
+    _currentTripId = '';
+    _selectedItemId = null;
+    _selectedDay = 1;
+    _currentUserId = userId;
+
+    // 해당 사용자(또는 게스트)의 로컬 캐시 로드
+    final result = await _storageService.loadTrips(userId: _currentUserId);
+    _trips = result.trips;
+    _currentTripId = result.currentTripId;
+    _isLoading = false;
+    notifyListeners();
+
+    // 클라우드 동기화 수행
+    await syncFromCloud();
+  }
+
+  /// 로그아웃 시 메모리 및 상태 즉시 초기화하고 게스트 전용 데이터로 전환 (다른 사용자 데이터 잔류 방지)
+  Future<void> unbindUser() async {
+    await bindUser(null);
+  }
+
+  /// 게스트 모드에서 작성한 유의미한 일정이 있는지 검사 (마이그레이션 안내 팝업용)
+  Future<bool> hasGuestTripsToMigrate() async {
+    try {
+      final guestTrips = await _storageService.getGuestTrips();
+      const defaultTitles = {'나의 여행 계획', '새로운 여행 계획', '도쿄 감성 힐링 여행', '도쿄 3박 4일 감성 힐링 여행'};
+      return guestTrips.any((t) =>
+          t.items.isNotEmpty ||
+          (!defaultTitles.contains(t.metadata.title) && t.metadata.title.trim().isNotEmpty));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 게스트 모드 작성 일정을 현재 로그인 사용자 계정으로 마이그레이션
+  Future<int> migrateGuestTripsToUser() async {
+    if (_currentUserId == null ||
+        _currentUserId!.isEmpty ||
+        _currentUserId == 'guest' ||
+        _currentUserId == 'guest-local-user') {
+      return 0;
+    }
+
+    try {
+      final guestTrips = await _storageService.getGuestTrips();
+      if (guestTrips.isEmpty) return 0;
+
+      // 유의미한 게스트 여행 선별 (아이템이 있거나 커스텀 타이틀)
+      const defaultTitles = {'나의 여행 계획', '새로운 여행 계획', '도쿄 감성 힐링 여행', '도쿄 3박 4일 감성 힐링 여행'};
+      final validGuestTrips = guestTrips
+          .where((t) => t.items.isNotEmpty || (!defaultTitles.contains(t.metadata.title) && t.metadata.title.trim().isNotEmpty))
+          .toList();
+
+      if (validGuestTrips.isEmpty) return 0;
+
+      // 현재 사용자의 목록에 병합 (기존 기본 템플릿만 있으면 교체)
+      if (_trips.length == 1 &&
+          _trips.first.metadata.id == 'trip-my-first-trip' &&
+          _trips.first.items.isEmpty) {
+        _trips = List<Trip>.from(validGuestTrips);
+        _currentTripId = _trips.first.metadata.id;
+      } else {
+        for (final gt in validGuestTrips) {
+          if (!_trips.any((t) => t.metadata.id == gt.metadata.id)) {
+            _trips.add(gt);
+          }
+        }
+      }
+
+      // 로컬 및 클라우드 영구 저장
+      await _storageService.saveTrips(_trips, _currentTripId, userId: _currentUserId);
+      await _cloudSyncService.migrateLocalTripsToCloud(validGuestTrips, _currentUserId!);
+      await _storageService.clearGuestTrips();
+
+      notifyListeners();
+      return validGuestTrips.length;
+    } catch (e) {
+      debugPrint('[TripProvider] migrateGuestTripsToUser 실패: $e');
+      return 0;
+    }
+  }
+
   /// Supabase 클라우드에서 여행 계획 목록 조회 및 병합 동기화
   Future<void> syncFromCloud() async {
     _isSyncing = true;
+    _syncStatus = SyncStatus.syncing;
     _syncMessage = '클라우드 데이터 확인 중...';
     notifyListeners();
 
     try {
-      final cloudTrips = await _supabaseService.fetchTrips();
-      if (cloudTrips.isNotEmpty) {
-        final Map<String, Trip> tripMap = {};
-        for (final t in _trips) {
-          if (t.metadata.id.isNotEmpty) {
-            tripMap[t.metadata.id] = t;
-          }
-        }
-        // 클라우드 데이터로 덮어쓰기/병합
-        for (final ct in cloudTrips) {
-          if (ct.metadata.id.isNotEmpty) {
-            tripMap[ct.metadata.id] = ct;
-          }
-        }
+      List<Trip> cloudTrips = [];
 
-        _trips = tripMap.values.toList();
-        // 클라우드에 현재 여행 ID가 없으면 첫 번째 클라우드 여행으로 활성화
-        if (!_trips.any((t) => t.metadata.id == _currentTripId) && cloudTrips.isNotEmpty) {
-          _currentTripId = cloudTrips.first.metadata.id;
-        } else if (cloudTrips.isNotEmpty && _currentTripId == 'trip-my-first-trip' && cloudTrips.any((t) => t.metadata.id == 'trip-my-first-trip')) {
-          _currentTripId = 'trip-my-first-trip';
-        }
-
-        await _storageService.saveTrips(_trips, _currentTripId);
-        _syncMessage = '클라우드 데이터 동기화 완료';
+      if (isCloudSyncEnabled) {
+        cloudTrips = await _cloudSyncService.fetchUserTrips(_currentUserId!);
       } else {
-        _syncMessage = '클라우드 연동 완료';
+        // 게스트 모드이거나 SupabaseService 주입(테스트 등) 환경: 기본 fetchTrips 시도
+        cloudTrips = await _supabaseService.fetchTrips();
+      }
+
+      if (cloudTrips.isNotEmpty) {
+        // 충돌 해결 및 병합
+        _trips = _cloudSyncService.resolveConflicts(_trips, cloudTrips);
+
+        // 현재 활성 여행 유효성 검사
+        if (!_trips.any((t) => t.metadata.id == _currentTripId)) {
+          _currentTripId = _trips.first.metadata.id;
+        }
+
+        await _storageService.saveTrips(_trips, _currentTripId, userId: _currentUserId);
+        _syncStatus = SyncStatus.synced;
+        _syncMessage = '클라우드 동기화 완료';
+      } else {
+        // 클라우드가 비어있고 로그인 상태에서 로컬에 여행이 있으면 클라우드로 업로드
+        if (isCloudSyncEnabled && _trips.isNotEmpty && _trips.any((t) => t.items.isNotEmpty)) {
+          for (final t in _trips) {
+            await _cloudSyncService.syncTripToCloud(t, _currentUserId!);
+          }
+          _syncStatus = SyncStatus.synced;
+          _syncMessage = '클라우드 연동 완료';
+        } else {
+          _syncStatus = isCloudSyncEnabled ? SyncStatus.synced : SyncStatus.localOnly;
+          _syncMessage = isCloudSyncEnabled ? '클라우드 연동 완료' : '로컬 오프라인 모드';
+        }
       }
     } catch (_) {
+      _syncStatus = SyncStatus.offline;
       _syncMessage = '오프라인 모드';
     } finally {
       _isSyncing = false;
@@ -150,11 +276,15 @@ class TripProvider extends ChangeNotifier {
   }
 
   Future<void> _persist() async {
-    await _storageService.saveTrips(_trips, _currentTripId);
+    await _storageService.saveTrips(_trips, _currentTripId, userId: _currentUserId);
     // Supabase 클라우드 백그라운드 자동 동기화
     final cur = currentTrip;
     if (cur.metadata.id.isNotEmpty) {
-      _supabaseService.syncTrip(cur);
+      if (isCloudSyncEnabled) {
+        _cloudSyncService.syncTripToCloud(cur, _currentUserId!);
+      } else {
+        _supabaseService.syncTrip(cur);
+      }
     }
   }
 
@@ -260,7 +390,11 @@ class TripProvider extends ChangeNotifier {
     }
 
     _persist();
-    _supabaseService.deleteTrip(tripId);
+    if (isCloudSyncEnabled) {
+      _cloudSyncService.deleteTripFromCloud(tripId, _currentUserId!);
+    } else {
+      _supabaseService.deleteTrip(tripId);
+    }
     notifyListeners();
     return true;
   }
