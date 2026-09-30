@@ -553,7 +553,7 @@ class _ItemEditDialogState extends State<ItemEditDialog> {
         baseItem: widget.baseItem!,
         candidateItem: updated,
       );
-      AppToast.success(context, '대안 플랜(후보)이 추가되었습니다.');
+      AppToast.success(context, '대안이 추가되었습니다.');
     } else if (isNew) {
       provider.addItem(updated);
     } else {
@@ -632,7 +632,7 @@ class _ItemEditDialogState extends State<ItemEditDialog> {
                       const SizedBox(width: 8),
                       Text(
                         isCandidate
-                            ? '대안 플랜(후보) 추가'
+                            ? '대안 추가'
                             : (isEditing ? '일정 수정' : '새 일정 추가'),
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),

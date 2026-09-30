@@ -613,7 +613,7 @@ class _TimelineSlotCardState extends State<_TimelineSlotCard> {
                             ),
                             const SizedBox(width: 10),
                             const Text(
-                              '대안(플랜 B) 추가',
+                              '대안 추가',
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
