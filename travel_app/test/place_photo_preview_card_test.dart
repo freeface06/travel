@@ -139,7 +139,7 @@ void main() {
   });
 
   group('PlaceAllPhotosSheet 팝업 시트 렌더링 테스트', () {
-    testWidgets('PlaceAllPhotosSheet가 전달받은 사진과 장소명을 그리드로 정상 렌더링한다', (tester) async {
+    testWidgets('PlaceAllPhotosSheet가 전달받은 사진과 장소명을 그리드로 정상 렌더링하고, 하단에 완료 안내 또는 더보기 인터랙션이 노출된다', (tester) async {
       final samplePhotos = [
         'https://images.unsplash.com/photo-1',
         'https://images.unsplash.com/photo-2',
@@ -169,13 +169,110 @@ void main() {
 
       // 시트 열기 버튼 탭
       await tester.tap(find.text('열기'));
-      await tester.pumpAndSettle();
+      await tester.pump(); // 첫 프레임 빌드
 
       // 시트 헤더 검증 (장소명과 사진 수만 깔끔하게 표시, 별점/리뷰 없음)
       expect(find.text('인천국제공항'), findsOneWidget);
       expect(find.text('사진 3장'), findsOneWidget);
       expect(find.text('4.5'), findsNothing);
       expect(find.text('리뷰 33,257개'), findsNothing);
+
+      // 비동기 작업 완료 대기
+      await tester.pumpAndSettle();
+
+      // 자동 뷰포트 채움 로직 수행 후 테스트 환경에서는 추가 사진이 없어 모든 사진 완료 안내 문구 표시
+      expect(find.text('해당 장소의 모든 사진을 불러왔습니다. (총 3장)'), findsOneWidget);
+    });
+
+    testWidgets('세로 비율이 매우 긴 화면(Z폴드 세로모드 등)에서도 에러 없이 렌더링 및 뷰포트 채움 가드가 자동 동작한다', (tester) async {
+      // Z폴드 세로 모드 해상도 시뮬레이션 (너비 400, 높이 1200)
+      tester.view.physicalSize = const Size(400, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final sampleTenPhotos = List.generate(10, (i) => 'https://images.unsplash.com/photo-$i');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () {
+                  PlaceAllPhotosSheet.show(
+                    context,
+                    placeName: '발리 쿠타 비치',
+                    initialPhotos: sampleTenPhotos,
+                    lat: -8.72,
+                    lng: 115.17,
+                  );
+                },
+                child: const Text('열기'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('열기'));
+      await tester.pump(); // 시트 오픈 첫 프레임
+
+      expect(find.text('발리 쿠타 비치'), findsOneWidget);
+      expect(find.text('사진 10장'), findsOneWidget);
+
+      // 긴 화면에서 addPostFrameCallback으로 _checkAndAutoLoadMore()가 자동 실행되어 로드 완료
+      await tester.pumpAndSettle();
+
+      // 뷰포트 자동 채움이 정상 완료되어 완료 문구 표시
+      expect(find.text('해당 장소의 모든 사진을 불러왔습니다. (총 10장)'), findsOneWidget);
+    });
+
+    testWidgets('일반 화면 비율에서 사진 목록 하단으로 스크롤 시 [사진 더 불러오기] 버튼이 노출된다', (tester) async {
+      // 뷰포트 높이를 작게 설정하여 스크롤이 확실히 생기도록 구성 (너비 400, 높이 500)
+      tester.view.physicalSize = const Size(400, 500);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final samplePhotos = List.generate(20, (i) => 'https://images.unsplash.com/photo-$i');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () {
+                  PlaceAllPhotosSheet.show(
+                    context,
+                    placeName: '도쿄 디즈니랜드',
+                    initialPhotos: samplePhotos,
+                    lat: 35.6329,
+                    lng: 139.8804,
+                  );
+                },
+                child: const Text('열기'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('열기'));
+      await tester.pumpAndSettle(); // 바텀시트 슬라이드 업 애니메이션 완료
+
+      expect(find.text('도쿄 디즈니랜드'), findsOneWidget);
+      expect(find.text('사진 20장'), findsOneWidget);
+
+      // 하단 끝까지 스크롤하여 더보기/완료 안내 영역으로 이동
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -2500));
+      await tester.pumpAndSettle();
+
+      // 최하단 도달 시 자동 로드 또는 완료 안내 문구 표시 확인
+      expect(find.text('해당 장소의 모든 사진을 불러왔습니다. (총 20장)'), findsOneWidget);
     });
   });
 }

@@ -68,6 +68,8 @@ class _PlaceAllPhotosSheetState extends State<PlaceAllPhotosSheet> {
   bool _isLoadingMore = false;
   bool _hasMore = true;
   int _page = 1;
+  int _autoFillAttempts = 0;
+  static const int _maxAutoFillAttempts = 3;
 
   double? _resolvedLat;
   double? _resolvedLng;
@@ -85,12 +87,14 @@ class _PlaceAllPhotosSheetState extends State<PlaceAllPhotosSheet> {
 
     _scrollController.addListener(_onScroll);
 
-    // 전달받은 사진이 없거나 추가 정보(평점 등)가 비어있는 경우 즉시 장소 정보 로드
-    if (_photos.isEmpty || _resolvedLat == null || _rating == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+    // 렌더링 완료 후 초기 데이터 로드 또는 긴 화면(Z폴드 등) 뷰포트 자동 채움 검사
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_photos.isEmpty || _resolvedLat == null || _rating == null) {
         _loadInitialPhotos();
-      });
-    }
+      } else {
+        _checkAndAutoLoadMore();
+      }
+    });
   }
 
   @override
@@ -108,6 +112,22 @@ class _PlaceAllPhotosSheetState extends State<PlaceAllPhotosSheet> {
     // 최하단 200px 근접 시 추가 사진 자동 로드 (무한 스크롤)
     if (currentScroll >= (maxScroll - 200) && !_isLoadingMore && _hasMore) {
       _loadMorePhotos();
+    }
+  }
+
+  /// Z폴드나 고해상도 긴 화면 디바이스에서 초기 사진 목록(10장)이 스크롤 없이 뷰포트에 모두 맞아떨어져
+  /// 스크롤 리스너가 동작하지 않는 경우(Underfilled Viewport), 스크롤이 생길 때까지 추가 사진을 자동 로드
+  void _checkAndAutoLoadMore() {
+    if (!mounted || _isLoadingMore || _isLoadingInitial || !_hasMore) return;
+    if (_autoFillAttempts >= _maxAutoFillAttempts) return;
+
+    if (_scrollController.hasClients) {
+      final position = _scrollController.position;
+      // 스크롤 가능 여유 공간이 120px 이하인 경우 (내용물이 뷰포트보다 작거나 거의 딱 맞는 상태)
+      if (position.maxScrollExtent <= 120) {
+        _autoFillAttempts++;
+        _loadMorePhotos();
+      }
     }
   }
 
@@ -146,19 +166,29 @@ class _PlaceAllPhotosSheetState extends State<PlaceAllPhotosSheet> {
     } finally {
       if (mounted) {
         setState(() => _isLoadingInitial = false);
+        // 초기 로드 후에도 긴 화면 디바이스에서 뷰포트가 비어있는지 확인하여 자동 추가 로드
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _checkAndAutoLoadMore();
+        });
       }
     }
   }
 
-  /// 무한 스크롤: 스크롤이 하단에 도달했을 때 추가 고화질 사진 로드
+  /// 무한 스크롤: 스크롤이 하단에 도달하거나 뷰포트 채움이 필요할 때 추가 고화질 사진 로드
   Future<void> _loadMorePhotos() async {
     if (_isLoadingMore || !_hasMore) return;
 
-    final lat = _resolvedLat;
-    final lng = _resolvedLng;
+    var lat = _resolvedLat;
+    var lng = _resolvedLng;
     if (lat == null || lng == null) {
-      setState(() => _hasMore = false);
-      return;
+      // 위경도가 누락된 경우 초기 조회를 먼저 수행하여 좌표 복구 시도
+      await _loadInitialPhotos();
+      lat = _resolvedLat;
+      lng = _resolvedLng;
+      if (lat == null || lng == null) {
+        if (mounted) setState(() => _hasMore = false);
+        return;
+      }
     }
 
     setState(() => _isLoadingMore = true);
@@ -185,6 +215,11 @@ class _PlaceAllPhotosSheetState extends State<PlaceAllPhotosSheet> {
           } else {
             _hasMore = false;
           }
+        });
+
+        // 추가 로드 후에도 여전히 긴 화면 디바이스에서 스크롤 여유가 없다면 추가 로드 재검사
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _checkAndAutoLoadMore();
         });
       }
     } catch (e) {
@@ -314,7 +349,22 @@ class _PlaceAllPhotosSheetState extends State<PlaceAllPhotosSheet> {
                             style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
                           ),
                         )
-                      : CustomScrollView(
+                      : NotificationListener<ScrollNotification>(
+                          onNotification: (notification) {
+                            // 사용자가 화면 끝에서 위로 오버스크롤(당기기/바운스)할 때 추가 사진 즉시 로드
+                            if (notification is OverscrollNotification && notification.overscroll > 0) {
+                              if (!_isLoadingMore && _hasMore) {
+                                _loadMorePhotos();
+                              }
+                            } else if (notification is ScrollEndNotification) {
+                              // 스크롤이 끝에 도달했을 때 추가 로드
+                              if (notification.metrics.extentAfter < 100 && !_isLoadingMore && _hasMore) {
+                                _loadMorePhotos();
+                              }
+                            }
+                            return false;
+                          },
+                          child: CustomScrollView(
                           controller: _scrollController,
                           physics: const AlwaysScrollableScrollPhysics(),
                           slivers: [
@@ -358,7 +408,7 @@ class _PlaceAllPhotosSheetState extends State<PlaceAllPhotosSheet> {
                               ),
                             ),
 
-                            // 하단 무한 스크롤 로딩 및 종료 인디케이터
+                            // 하단 무한 스크롤 로딩, 수동 더보기 버튼 및 종료 안내
                             SliverToBoxAdapter(
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(vertical: 20),
@@ -385,20 +435,46 @@ class _PlaceAllPhotosSheetState extends State<PlaceAllPhotosSheet> {
                                             ),
                                           ],
                                         )
-                                      : !_hasMore && _photos.isNotEmpty
-                                          ? const Text(
-                                              '해당 장소의 모든 사진을 불러왔습니다.',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Color(0xFF94A3B8),
+                                      : _hasMore && _photos.isNotEmpty
+                                          ? OutlinedButton.icon(
+                                              onPressed: _loadMorePhotos,
+                                              icon: const Icon(
+                                                Icons.add_photo_alternate_outlined,
+                                                size: 16,
+                                                color: AppTheme.primary,
+                                              ),
+                                              label: const Text(
+                                                '사진 더 불러오기',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: AppTheme.primary,
+                                                ),
+                                              ),
+                                              style: OutlinedButton.styleFrom(
+                                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                                side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(10),
+                                                ),
+                                                backgroundColor: const Color(0xFFF8FAFC),
                                               ),
                                             )
-                                          : const SizedBox.shrink(),
+                                          : !_hasMore && _photos.isNotEmpty
+                                              ? Text(
+                                                  '해당 장소의 모든 사진을 불러왔습니다. (총 ${_photos.length}장)',
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: Color(0xFF94A3B8),
+                                                  ),
+                                                )
+                                              : const SizedBox.shrink(),
                                 ),
                               ),
                             ),
                           ],
                         ),
+                      ),
             ),
           ],
         ),
