@@ -263,10 +263,26 @@ class GeocodingService {
 
     // URL이 없거나 URL 내에서 좌표를 추출하지 못한 경우 일반 좌표 및 DMS 도/분/초 문자열 파싱
     if (lat == null || lng == null) {
-      final dms = parseDmsCoordinates(trimmed);
-      if (dms != null) {
-        lat = dms.lat;
-        lng = dms.lng;
+      final dmsMatch = RegExp(
+        r'''(\d{1,2})[°\s]+(\d{1,2})['′\s]+(\d{1,2}(?:\.\d+)?)["″\s]*([NSns])[\s,]+(\d{1,3})[°\s]+(\d{1,2})['′\s]+(\d{1,2}(?:\.\d+)?)["″\s]*([EWew])''',
+      ).firstMatch(trimmed);
+
+      if (dmsMatch != null) {
+        final dms = parseDmsCoordinates(trimmed);
+        if (dms != null) {
+          lat = dms.lat;
+          lng = dms.lng;
+
+          final before = trimmed.substring(0, dmsMatch.start).trim();
+          final after = trimmed.substring(dmsMatch.end).trim();
+          final leftover = [before, after].where((s) => s.isNotEmpty).join(' ').trim();
+          if (leftover.isNotEmpty &&
+              leftover != trimmed &&
+              !leftover.contains('http://') &&
+              !leftover.contains('https://')) {
+            prefixName ??= leftover;
+          }
+        }
       } else {
         final clean = trimmed
             .replaceAll('(', '')
@@ -346,6 +362,10 @@ class GeocodingService {
       if (byId != null) {
         debugPrint('[Geocoding] Resolved directly via FTID/PlaceID from input: $byId');
         return byId;
+      }
+      if (directFtid != null && (input.trim().startsWith('0x') || input.trim().contains(':0x'))) {
+        debugPrint('[Geocoding] Direct FTID was not found in Place Details API. Aborting fallback search.');
+        return null;
       }
     }
 
