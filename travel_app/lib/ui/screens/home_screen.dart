@@ -17,11 +17,14 @@ import '../dialogs/trip_manager_dialog.dart';
 import '../dialogs/trip_settings_dialog.dart';
 import '../dialogs/trip_share_dialog.dart';
 import '../tabs/expense_tab.dart';
+import 'dart:async';
 import '../tabs/map_tab.dart';
 import '../tabs/timeline_tab.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_menu_divider.dart';
 import '../widgets/app_toast.dart';
+import '../../services/quick_import_service.dart';
+import '../sheets/quick_place_import_sheet.dart';
 import 'login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -31,15 +34,60 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final DraggableScrollableController _sheetController = DraggableScrollableController();
   String _mapStyle = 'google_roadmap'; // 'google_roadmap' (일반) | 'google_satellite' (위성)
   bool _checkedGuestMigration = false;
+  StreamSubscription<String>? _placeUrlSub;
+  bool _isImportSheetShowing = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _sheetController.addListener(_onSheetScroll);
+
+    // 구글맵 공유 인텐트 및 클립보드 장소 감지 초기화 및 리스너 등록
+    QuickImportService.instance.initialize();
+    _placeUrlSub = QuickImportService.instance.onPlaceUrlDetected.listen(_handleDetectedPlaceUrl);
+
+    // 첫 프레임 렌더링 완료 후 클립보드 자동 검사 시도
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        QuickImportService.instance.checkClipboard();
+      }
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      QuickImportService.instance.checkClipboard();
+    }
+  }
+
+  /// 구글맵 URL이 공유 인텐트나 클립보드에서 감지되었을 때 바텀시트 팝업
+  Future<void> _handleDetectedPlaceUrl(String url) async {
+    if (!mounted || _isImportSheetShowing) return;
+
+    // 현재 화면 컨텍스트 안전성 검사
+    final nav = Navigator.maybeOf(context);
+    if (nav == null) return;
+
+    _isImportSheetShowing = true;
+    try {
+      final tripProvider = context.read<TripProvider>();
+      final currentDay = tripProvider.selectedDay is int ? tripProvider.selectedDay as int : 1;
+      await QuickPlaceImportSheet.show(
+        context,
+        rawInput: url,
+        targetDay: currentDay,
+      );
+    } finally {
+      if (mounted) {
+        _isImportSheetShowing = false;
+      }
+    }
   }
 
   @override
@@ -93,6 +141,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _placeUrlSub?.cancel();
     _sheetController.removeListener(_onSheetScroll);
     _sheetController.dispose();
     super.dispose();
