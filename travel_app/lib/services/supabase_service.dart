@@ -12,8 +12,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/trip.dart';
 
 class SupabaseService {
-  static const String defaultUrl = 'https://qmqklwelrsmlsrmtnsxt.supabase.co';
-  static const String defaultAnonKey = 'sb_publishable_Gz-4w0mexqsHUTaNl6AtDw_b9W1nddm';
+  static const String defaultUrl = 'https://vmmacaxaivpttopqqfeq.supabase.co';
+  static const String defaultAnonKey = 'sb_publishable__rI7DG40RlhkBCN2nAl4vA_Puf6ad9T';
 
   static bool _isInitialized = false;
 

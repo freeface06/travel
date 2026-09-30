@@ -470,7 +470,7 @@ runTest('7-5. 여행 계획 삭제 (deleteTrip) 및 최소 1개 유지 방어 �
     const config = mgr.getConfig();
     assert.strictEqual(config.url, TripSupabase.DEFAULT_SUPABASE_URL);
     assert.strictEqual(config.anonKey, TripSupabase.DEFAULT_SUPABASE_KEY);
-    assert.strictEqual(config.url, 'https://qmqklwelrsmlsrmtnsxt.supabase.co');
+    assert.strictEqual(config.url, 'https://vmmacaxaivpttopqqfeq.supabase.co');
   });
 
   await runTest('8-2. 사용자 커스텀 설정 덮어쓰기 및 clearConfig 시 기본 내장값으로 복귀 검증', () => {

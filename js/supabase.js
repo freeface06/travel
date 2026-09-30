@@ -19,8 +19,8 @@
   const STORAGE_KEY_KEY = 'mytriplog_supabase_anon_key';
 
   // 프로젝트 기본 내장 Supabase 인프라 연결 정보 (영구 무중단 클라우드 자동 동기화 SSOT)
-  const DEFAULT_SUPABASE_URL = 'https://qmqklwelrsmlsrmtnsxt.supabase.co';
-  const DEFAULT_SUPABASE_KEY = 'sb_publishable_Gz-4w0mexqsHUTaNl6AtDw_b9W1nddm';
+  const DEFAULT_SUPABASE_URL = 'https://vmmacaxaivpttopqqfeq.supabase.co';
+  const DEFAULT_SUPABASE_KEY = 'sb_publishable__rI7DG40RlhkBCN2nAl4vA_Puf6ad9T';
 
   // 과거 레거시 더미 데이터 식별자 세트
   const DUMMY_ITEM_IDS = new Set([
