@@ -19,7 +19,6 @@ class PlacePhotoPreviewCard extends StatefulWidget {
   final String address;
   final List<String> personalPhotos;
   final bool showHeader;
-  final VoidCallback? onDirections;
   final VoidCallback? onFocusMap;
 
   const PlacePhotoPreviewCard({
@@ -31,7 +30,6 @@ class PlacePhotoPreviewCard extends StatefulWidget {
     this.address = '',
     this.personalPhotos = const [],
     this.showHeader = true,
-    this.onDirections,
     this.onFocusMap,
   });
 
@@ -146,26 +144,17 @@ class _PlacePhotoPreviewCardState extends State<PlacePhotoPreviewCard> {
                     overflow: TextOverflow.ellipsis,
                   ),
 
-                  // 액션 알약 버튼 (경로, 지도, 사진 전체보기)
+                  // 액션 알약 버튼 (지도에서 보기, 사진 전체보기)
                   const SizedBox(height: 10),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        if (widget.onDirections != null) ...[
-                          _buildActionButton(
-                            icon: Icons.directions_outlined,
-                            label: '경로',
-                            isPrimary: true,
-                            onTap: widget.onDirections!,
-                          ),
-                          const SizedBox(width: 8),
-                        ],
                         if (widget.onFocusMap != null) ...[
                           _buildActionButton(
                             icon: Icons.navigation_outlined,
                             label: '지도에서 보기',
-                            isPrimary: false,
+                            isPrimary: true,
                             onTap: widget.onFocusMap!,
                           ),
                           const SizedBox(width: 8),
@@ -173,7 +162,7 @@ class _PlacePhotoPreviewCardState extends State<PlacePhotoPreviewCard> {
                         _buildActionButton(
                           icon: Icons.photo_library_outlined,
                           label: '사진 전체보기',
-                          isPrimary: false,
+                          isPrimary: widget.onFocusMap == null,
                           onTap: () => _openAllPhotos(combined),
                         ),
                       ],

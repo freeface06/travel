@@ -64,33 +64,6 @@ class _ItemDetailSheetState extends State<ItemDetailSheet> {
     _item = widget.item;
   }
 
-  Future<void> _openDirections(BuildContext context) async {
-    Uri? uri;
-    if (item.hasCoordinates) {
-      uri = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lng}&hl=ko');
-    } else if (item.address.isNotEmpty) {
-      uri = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=${Uri.encodeComponent(item.address)}&hl=ko');
-    } else if (item.title.isNotEmpty) {
-      uri = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=${Uri.encodeComponent(item.title)}&hl=ko');
-    }
-
-    if (uri != null) {
-      try {
-        final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-        if (!launched) {
-          await launchUrl(uri);
-        }
-      } catch (_) {
-        if (context.mounted) {
-          AppToast.error(context, '길찾기를 실행할 수 없습니다.');
-        }
-      }
-    } else {
-      if (context.mounted) {
-        AppToast.warning(context, '위치 정보가 없습니다.');
-      }
-    }
-  }
 
   void _copyToClipboard(BuildContext context, String text, String label) {
     Clipboard.setData(ClipboardData(text: text));
@@ -289,7 +262,6 @@ class _ItemDetailSheetState extends State<ItemDetailSheet> {
                         address: item.address,
                         personalPhotos: item.photos,
                         showHeader: true,
-                        onDirections: () => _openDirections(context),
                         onFocusMap: widget.onFocusMap != null
                             ? () {
                                 Navigator.of(context).pop();

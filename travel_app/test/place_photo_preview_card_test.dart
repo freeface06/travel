@@ -88,7 +88,6 @@ void main() {
                 lng: 126.4407,
                 personalPhotos: samplePhotos,
                 showHeader: true,
-                onDirections: () {},
                 onFocusMap: () {},
               ),
             ),
@@ -98,9 +97,9 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // 헤더 및 액션 버튼 검증
+      // 헤더 및 액션 버튼 검증 (경로 버튼은 제거되었고, 지도에서 보기와 사진 전체보기만 노출됨)
       expect(find.text('인천국제공항'), findsOneWidget);
-      expect(find.text('경로'), findsOneWidget);
+      expect(find.text('경로'), findsNothing);
       expect(find.text('지도에서 보기'), findsOneWidget);
       expect(find.text('사진 전체보기'), findsOneWidget);
 
