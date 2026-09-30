@@ -9,6 +9,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'google_places_service.dart';
 
 class PlaceSearchResult {
   final String name;
@@ -519,12 +520,48 @@ class GeocodingService {
 
     // 최종 Fallback: URL 경로에서 추출된 주소/장소명 또는 텍스트 후보로 장소 검색
     final searchCandidates = [
-      if (addressFromPath != null && addressFromPath!.isNotEmpty) addressFromPath!,
-      if (addressFromPath != null && addressFromPath!.isNotEmpty) _sanitizeAddress(addressFromPath!),
       if (placeNameFromPath != null && placeNameFromPath!.isNotEmpty) placeNameFromPath!,
       if (textNameCandidate != null && textNameCandidate.isNotEmpty) textNameCandidate,
+      if (addressFromPath != null && addressFromPath!.isNotEmpty) addressFromPath!,
+      if (addressFromPath != null && addressFromPath!.isNotEmpty) _sanitizeAddress(addressFromPath!),
     ];
 
+    // 1단계: Google 공식 Places / Geocoding API 우선 조회 (정확도 99.9%)
+    for (final candidate in searchCandidates) {
+      if (candidate.length < 2) continue;
+      debugPrint('[Geocoding] Trying Google Places API for candidate: "$candidate"');
+      final googlePlaces = await _searchViaGooglePlaces(candidate, limit: 1);
+      if (googlePlaces.isNotEmpty) {
+        final first = googlePlaces.first;
+        final resolvedName = textNameCandidate ?? placeNameFromPath ?? first.name;
+        final resolvedAddress = first.displayName.isNotEmpty ? first.displayName : (addressFromPath ?? textAddressCandidate);
+        debugPrint('[Geocoding] Google Places API succeeded: $resolvedName (${first.lat}, ${first.lng})');
+        return ParsedLocation(
+          name: resolvedName,
+          lat: first.lat,
+          lng: first.lng,
+          address: resolvedAddress,
+          sourceUrl: rawUrl,
+        );
+      }
+
+      final googleGeocode = await _searchViaGoogleGeocoding(candidate, limit: 1);
+      if (googleGeocode.isNotEmpty) {
+        final first = googleGeocode.first;
+        final resolvedName = textNameCandidate ?? placeNameFromPath ?? first.name;
+        final resolvedAddress = first.displayName.isNotEmpty ? first.displayName : (addressFromPath ?? textAddressCandidate);
+        debugPrint('[Geocoding] Google Geocoding API succeeded: $resolvedName (${first.lat}, ${first.lng})');
+        return ParsedLocation(
+          name: resolvedName,
+          lat: first.lat,
+          lng: first.lng,
+          address: resolvedAddress,
+          sourceUrl: rawUrl,
+        );
+      }
+    }
+
+    // 2단계: 위키백과 / Nominatim / Photon 폴백 검색
     for (final candidate in searchCandidates) {
       if (candidate.length < 2) continue;
       debugPrint('[Geocoding] Fallback search with candidate: "$candidate"');
@@ -546,6 +583,124 @@ class GeocodingService {
 
     debugPrint('[Geocoding] resolveLocation failed to find location for: "$input"');
     return null;
+  }
+
+  /// 0. Google Places API (Find Place from Text) 공식 장소 검색 (정확도 최우선)
+  Future<List<PlaceSearchResult>> _searchViaGooglePlaces(
+    String query, {
+    int limit = 5,
+    http.Client? client,
+  }) async {
+    final apiKey = await GooglePlacesService.getApiKey();
+    if (apiKey.isEmpty) return [];
+
+    final encoded = Uri.encodeComponent(query);
+    final url = Uri.parse(
+      'https://maps.googleapis.com/maps/api/place/findplacefromtext/json'
+      '?input=$encoded'
+      '&inputtype=textquery'
+      '&fields=place_id,name,formatted_address,geometry,types'
+      '&language=ko'
+      '&key=$apiKey',
+    );
+
+    final httpClient = client ?? http.Client();
+    try {
+      final response = await httpClient.get(url).timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['status'] == 'OK' && data['candidates'] is List) {
+          final list = <PlaceSearchResult>[];
+          for (final c in (data['candidates'] as List)) {
+            final loc = c['geometry']?['location'];
+            if (loc is Map) {
+              final lat = (loc['lat'] as num?)?.toDouble() ?? 0.0;
+              final lng = (loc['lng'] as num?)?.toDouble() ?? 0.0;
+              final name = c['name'] as String? ?? query;
+              final addr = c['formatted_address'] as String? ?? '';
+              final types = c['types'] as List?;
+              final type = (types != null && types.isNotEmpty) ? types.first.toString() : 'google_place';
+              list.add(PlaceSearchResult(
+                name: name,
+                displayName: addr.isNotEmpty ? addr : name,
+                secondaryText: addr,
+                lat: lat,
+                lng: lng,
+                type: type,
+              ));
+            }
+          }
+          return list;
+        }
+      }
+    } catch (e) {
+      debugPrint('[Geocoding] _searchViaGooglePlaces error: $e');
+    } finally {
+      if (client == null) {
+        httpClient.close();
+      }
+    }
+    return [];
+  }
+
+  /// 0-1. Google Geocoding API 공식 주소/장소 지오코딩
+  Future<List<PlaceSearchResult>> _searchViaGoogleGeocoding(
+    String query, {
+    int limit = 5,
+    http.Client? client,
+  }) async {
+    final apiKey = await GooglePlacesService.getApiKey();
+    if (apiKey.isEmpty) return [];
+
+    final encoded = Uri.encodeComponent(query);
+    final url = Uri.parse(
+      'https://maps.googleapis.com/maps/api/geocode/json'
+      '?address=$encoded'
+      '&language=ko'
+      '&key=$apiKey',
+    );
+
+    final httpClient = client ?? http.Client();
+    try {
+      final response = await httpClient.get(url).timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['status'] == 'OK' && data['results'] is List) {
+          final list = <PlaceSearchResult>[];
+          for (final r in (data['results'] as List)) {
+            final loc = r['geometry']?['location'];
+            if (loc is Map) {
+              final lat = (loc['lat'] as num?)?.toDouble() ?? 0.0;
+              final lng = (loc['lng'] as num?)?.toDouble() ?? 0.0;
+              final formattedAddr = r['formatted_address'] as String? ?? query;
+              final comps = r['address_components'] as List?;
+              String name = query;
+              if (comps != null && comps.isNotEmpty) {
+                name = comps.first['long_name'] as String? ?? query;
+              }
+              final types = r['types'] as List?;
+              final type = (types != null && types.isNotEmpty) ? types.first.toString() : 'google_geocode';
+              list.add(PlaceSearchResult(
+                name: name,
+                displayName: formattedAddr,
+                secondaryText: formattedAddr,
+                lat: lat,
+                lng: lng,
+                type: type,
+              ));
+            }
+          }
+          return list;
+        }
+      }
+    } catch (e) {
+      debugPrint('[Geocoding] _searchViaGoogleGeocoding error: $e');
+    } finally {
+      if (client == null) {
+        httpClient.close();
+      }
+    }
+    return [];
   }
 
   /// 1. 위키백과(Wikipedia) 글로벌 랜드마크/공항/관광지 지오코딩 API (해외 한글 검색 특화)
@@ -751,6 +906,21 @@ class GeocodingService {
       }
     }
 
+    final List<PlaceSearchResult> combined = [];
+    final Set<String> seenNames = {};
+
+    // 0순위: Google 공식 Places API 검색 결과 우선 반환 (정확도 최우선)
+    final googleResults = await _searchViaGooglePlaces(q, limit: limit);
+    for (final r in googleResults) {
+      final key = r.name.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+      if (seenNames.add(key)) {
+        combined.add(r);
+      }
+    }
+    if (combined.isNotEmpty) {
+      return combined;
+    }
+
     // 위키백과, Nominatim, Photon을 동시 병렬 요청
     final results = await Future.wait([
       _searchViaWikipedia(q, limit: limit),
@@ -761,9 +931,6 @@ class GeocodingService {
     final wikiResults = results[0];
     final nominatimResults = results[1];
     final photonResults = results[2];
-
-    final List<PlaceSearchResult> combined = [];
-    final Set<String> seenNames = {};
 
     // 1순위: 위키백과 검색 결과 (공항, 주요 랜드마크, 관광지)
     for (final r in wikiResults) {
@@ -810,8 +977,42 @@ class GeocodingService {
     return combined;
   }
 
-  /// Nominatim 역지오코딩 (위도/경도 -> 주소 및 장소명)
-  Future<({String name, String displayName})?> reverseGeocode(double lat, double lng) async {
+  /// Google Geocoding API 우선 -> Nominatim 폴백 역지오코딩 (위도/경도 -> 한국어 주소 및 장소명)
+  Future<({String name, String displayName})?> reverseGeocode(
+    double lat,
+    double lng, {
+    http.Client? client,
+  }) async {
+    final apiKey = await GooglePlacesService.getApiKey();
+    if (apiKey.isNotEmpty) {
+      final url = Uri.parse(
+        'https://maps.googleapis.com/maps/api/geocode/json?latlng=$lat,$lng&language=ko&key=$apiKey',
+      );
+      final httpClient = client ?? http.Client();
+      try {
+        final response = await httpClient.get(url).timeout(const Duration(seconds: 4));
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          if (data['status'] == 'OK' && data['results'] is List && (data['results'] as List).isNotEmpty) {
+            final first = data['results'][0];
+            final formattedAddr = first['formatted_address'] as String? ?? '$lat, $lng';
+            final comps = first['address_components'] as List?;
+            String name = formattedAddr;
+            if (comps != null && comps.isNotEmpty) {
+              name = comps.first['long_name'] as String? ?? formattedAddr;
+            }
+            return (name: name, displayName: formattedAddr);
+          }
+        }
+      } catch (e) {
+        debugPrint('[Geocoding] Google reverseGeocode error: $e');
+      } finally {
+        if (client == null) {
+          httpClient.close();
+        }
+      }
+    }
+
     final url = Uri.parse(
       '$nominatimBase/reverse?format=json&lat=$lat&lon=$lng&zoom=18&addressdetails=1&accept-language=ko',
     );

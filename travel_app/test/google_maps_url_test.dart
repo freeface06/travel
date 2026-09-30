@@ -8,7 +8,10 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:travel_app/services/geocoding_service.dart';
 
+import 'dart:io';
+
 void main() {
+  HttpOverrides.global = null;
   test('Test GeocodingService parseLocationDetails with various inputs', () {
     // 1. Raw coordinates
     final r1 = GeocodingService.parseLocationDetails('-8.51234, 115.12345');
@@ -63,5 +66,29 @@ void main() {
     // Verify it is NOT Korean IP / Tancheon Viaduct (37.4797, 127.1169)
     expect(result.lat, isNot(closeTo(37.4797, 0.1)));
     expect(result.lng, isNot(closeTo(127.1169, 0.1)));
+  });
+
+  test('Test GeocodingService resolveLocation with UYsaPYJzftGy3wpCA (Kos Bulan Bali)', () async {
+    final service = GeocodingService();
+    final result = await service.resolveLocation('https://maps.app.goo.gl/UYsaPYJzftGy3wpCA');
+    // ignore: avoid_print
+    print('RESOLVED RESULT 3 (Kos Bulan Bali): $result');
+    expect(result, isNotNull);
+    expect(result!.name, contains('Kos Bulan Bali'));
+    // Exact location in Kuta/Tuban: -8.7547, 115.1747
+    expect(result.lat, closeTo(-8.7547, 0.01));
+    expect(result.lng, closeTo(115.1747, 0.01));
+  });
+
+  test('Test GeocodingService resolveLocation with uSgojHRexKhmgE2F6 (Hilton Garden Inn Bali)', () async {
+    final service = GeocodingService();
+    final result = await service.resolveLocation('https://maps.app.goo.gl/uSgojHRexKhmgE2F6?g_st=ac');
+    // ignore: avoid_print
+    print('RESOLVED RESULT 4 (Hilton Garden Inn): $result');
+    expect(result, isNotNull);
+    expect(result!.name, anyOf(contains('힐튼'), contains('Hilton')));
+    // Exact hotel location: -8.7436, 115.1710 (NOT the airport runway -8.7434, 115.1665)
+    expect(result.lat, closeTo(-8.7436, 0.01));
+    expect(result.lng, closeTo(115.1710, 0.01));
   });
 }
