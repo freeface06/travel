@@ -184,6 +184,56 @@ void main() {
       expect(activeItems.first.title, '오르세 미술관 (Plan B)');
     });
 
+    test('후보 플랜(4-1) 수정 시 slotGroupId와 candidateLabel이 온전히 보존되어 슬롯에서 이탈하지 않는다', () {
+      const baseItem = TripItem(
+        id: 'item-4-1',
+        day: 4,
+        title: '플랜 A (기존)',
+      );
+      provider.addItem(baseItem);
+
+      const cand2 = TripItem(
+        id: 'item-4-2',
+        day: 4,
+        title: '플랜 B',
+      );
+      provider.addCandidateItem(baseItem: baseItem, candidateItem: cand2);
+
+      const cand3 = TripItem(
+        id: 'item-4-3',
+        day: 4,
+        title: '플랜 C',
+      );
+      provider.addCandidateItem(baseItem: baseItem, candidateItem: cand3);
+
+      // 수정 전 슬롯 그룹 확인 (4일차에 1개의 슬롯, 후보 3개)
+      var slotsBefore = provider.getSlotGroupsForDay(4);
+      expect(slotsBefore.length, 1);
+      final slotKey = slotsBefore.keys.first;
+      expect(slotsBefore[slotKey]!.length, 3);
+
+      // 플랜 A (4-1)을 내용만 수정 (slotGroupId를 빈 문자열로 넘기더라도 방어되어야 함)
+      final editedItem = TripItem(
+        id: 'item-4-1',
+        day: 4,
+        title: '플랜 A (수정됨: 장소 및 메모 변경)',
+        memo: '메모 추가',
+        cost: 50000.0,
+      );
+      provider.updateItem('item-4-1', editedItem);
+
+      // 수정 후 슬롯 그룹 검증: 슬롯이 분리되어 2개가 되지 않고 여전히 1개여야 함!
+      var slotsAfter = provider.getSlotGroupsForDay(4);
+      expect(slotsAfter.length, 1, reason: '4-1이 슬롯에서 빠져나와 4번과 5번으로 분리되면 안 됨');
+      expect(slotsAfter[slotKey]!.length, 3);
+
+      final updated41 = slotsAfter[slotKey]!.firstWhere((i) => i.id == 'item-4-1');
+      expect(updated41.title, '플랜 A (수정됨: 장소 및 메모 변경)');
+      expect(updated41.slotGroupId, slotKey);
+      expect(updated41.candidateLabel, '1');
+      expect(updated41.isSelected, isTrue);
+    });
+
     test('활성(isSelected=true) 후보가 삭제되면 동일 슬롯에 남은 후보 중 첫 번째가 자동으로 isSelected=true로 승격된다', () {
       const baseItem = TripItem(
         id: 'base-1',

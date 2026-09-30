@@ -380,13 +380,48 @@ class TripProvider extends ChangeNotifier {
     final itemIdx = _trips[tripIdx].items.indexWhere((i) => i.id == id);
     if (itemIdx == -1) return null;
 
-    final updatedItems = List<TripItem>.from(_trips[tripIdx].items);
-    updatedItems[itemIdx] = updated;
-    _trips[tripIdx] = _trips[tripIdx].copyWith(items: updatedItems);
+    final existing = _trips[tripIdx].items[itemIdx];
 
+    // 동일 일차 내 수정 시 슬롯 메타데이터(slotGroupId, candidateLabel, isSelected) 완벽 보존
+    TripItem finalItem = updated;
+    if (existing.slotGroupId.isNotEmpty && updated.day == existing.day) {
+      finalItem = updated.copyWith(
+        slotGroupId: updated.slotGroupId.isNotEmpty ? updated.slotGroupId : existing.slotGroupId,
+        candidateLabel: updated.slotGroupId.isNotEmpty ? updated.candidateLabel : existing.candidateLabel,
+        isSelected: (existing.slotGroupId.isNotEmpty && updated.slotGroupId.isEmpty) ? existing.isSelected : updated.isSelected,
+      );
+    } else if (existing.slotGroupId.isNotEmpty && updated.day != existing.day) {
+      // 다른 일차로 이동한 경우 단독 슬롯으로 리셋
+      finalItem = updated.copyWith(
+        slotGroupId: '',
+        candidateLabel: '1',
+        isSelected: true,
+      );
+    }
+
+    var updatedItems = List<TripItem>.from(_trips[tripIdx].items);
+    updatedItems[itemIdx] = finalItem;
+
+    // 만약 다른 일차로 이동했고 기존에 선택되어 있던 아이템이었다면, 기존 슬롯에 남은 후보 자동 승격 처리
+    if (existing.slotGroupId.isNotEmpty && updated.day != existing.day && existing.isSelected) {
+      final remainingSlotItems = updatedItems
+          .where((i) => i.id != id && i.effectiveSlotId == existing.effectiveSlotId)
+          .toList();
+      if (remainingSlotItems.isNotEmpty && !remainingSlotItems.any((i) => i.isSelected)) {
+        final firstRemainingId = remainingSlotItems.first.id;
+        updatedItems = updatedItems.map((item) {
+          if (item.id == firstRemainingId) {
+            return item.copyWith(isSelected: true);
+          }
+          return item;
+        }).toList();
+      }
+    }
+
+    _trips[tripIdx] = _trips[tripIdx].copyWith(items: updatedItems);
     _persist();
     notifyListeners();
-    return updated;
+    return finalItem;
   }
 
   bool deleteItem(String id) {

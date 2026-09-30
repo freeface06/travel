@@ -543,6 +543,9 @@ class _ItemEditDialogState extends State<ItemEditDialog> {
       transitLine: _transitLineController.text.trim(),
       ticketOrSeat: _ticketOrSeatController.text.trim(),
       transferMemo: _transferMemoController.text.trim(),
+      slotGroupId: widget.item?.slotGroupId ?? '',
+      candidateLabel: widget.item?.candidateLabel ?? '1',
+      isSelected: widget.item?.isSelected ?? true,
     );
 
     if (widget.isCandidateMode && widget.baseItem != null) {
