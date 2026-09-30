@@ -1,6 +1,6 @@
-/// @intent 다중 통화 환율 환산, 지출 집계, 1/N 분담 및 그리디 최소 송금 횟수 정산 계산 엔진
+/// @intent 다중 통화 환율 환산, 지출 집계, 1/N 분담 및 확정 플랜(isSelected) 기준 정산 계산 엔진
 /// @agent Gemini/manager-develop
-/// @branch feat/flutter-migration
+/// @branch feat/flutter-travel-app
 /// @author @developer_name
 /// @date 2026-09-30
 library;
@@ -68,6 +68,7 @@ class ExpenseCalculator {
     }
 
     for (final item in items) {
+      if (!item.isSelected) continue;
       final rawCost = item.cost;
       if (rawCost <= 0) continue;
 

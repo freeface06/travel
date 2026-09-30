@@ -1,6 +1,6 @@
-/// @intent 여행 총 예상 경비 요약, 카테고리별 지출 분석 및 일차별 지출 현황 탭 화면 (정산 관련 UI 제거 및 순수 총 경비 집중 모드)
+/// @intent 여행 총 예상 경비 요약, 카테고리별 지출 분석 및 확정 플랜(isSelected) 기준 일차별 지출 현황 탭 화면
 /// @agent Gemini/manager-develop
-/// @branch feat/flutter-migration
+/// @branch feat/flutter-travel-app
 /// @author @developer_name
 /// @date 2026-09-30
 library;
@@ -27,10 +27,10 @@ class ExpenseTab extends StatelessWidget {
       customRates: meta.customRates,
     );
 
-    // 일차별 지출 계산
+    // 일차별 지출 계산 (확정 플랜만 반영)
     final Map<int, double> dayExpenseMap = {};
     for (final item in currentTrip.items) {
-      if (item.cost > 0) {
+      if (item.isSelected && item.cost > 0) {
         final converted = ExpenseCalculator.convertCurrency(
           item.cost,
           fromCurrency: item.currency,
@@ -41,7 +41,7 @@ class ExpenseTab extends StatelessWidget {
       }
     }
 
-    final totalCostItemsCount = currentTrip.items.where((i) => i.cost > 0).length;
+    final totalCostItemsCount = currentTrip.items.where((i) => i.isSelected && i.cost > 0).length;
 
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),

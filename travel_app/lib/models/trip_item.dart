@@ -1,6 +1,6 @@
-/// @intent 일정 아이템(TripItem) 도메인 모델 및 카테고리별 특화 필드 직렬화/역직렬화 정의 (Modified: photos 필드를 웹/Supabase Storage 규격인 객체 배열 및 photoDataUrl과 100% 호환되도록 toJson 직렬화 강화)
+/// @intent 일정 아이템(TripItem) 도메인 모델 - 슬롯 그룹핑(slotGroupId, candidateLabel, isSelected) 및 대안 플랜 다중 등록 지원
 /// @agent Gemini/manager-develop
-/// @branch feat/flutter-migration
+/// @branch feat/flutter-travel-app
 /// @author @developer_name
 /// @date 2026-09-30
 library;
@@ -21,6 +21,11 @@ class TripItem {
   final String time;
   final List<String> photos;
   final String locationUrl;
+
+  // 후보/대안 플랜 확장 필드
+  final String slotGroupId;
+  final String candidateLabel;
+  final bool isSelected;
 
   // 카테고리: FLIGHT
   final String flightType; // 'DEPARTURE' | 'ARRIVAL'
@@ -78,6 +83,9 @@ class TripItem {
     this.time = '',
     this.photos = const [],
     this.locationUrl = '',
+    this.slotGroupId = '',
+    this.candidateLabel = '1',
+    this.isSelected = true,
     this.flightType = 'DEPARTURE',
     this.airline = '',
     this.flightNo = '',
@@ -111,6 +119,9 @@ class TripItem {
 
   bool get hasCoordinates => lat != null && lng != null;
 
+  /// 슬롯 그룹핑 헬퍼: slotGroupId가 명시되지 않은 기존 단일 일정은 자신의 id를 슬롯 ID로 간주
+  String get effectiveSlotId => slotGroupId.isNotEmpty ? slotGroupId : id;
+
   TripItem copyWith({
     String? id,
     int? day,
@@ -126,6 +137,9 @@ class TripItem {
     String? time,
     List<String>? photos,
     String? locationUrl,
+    String? slotGroupId,
+    String? candidateLabel,
+    bool? isSelected,
     String? flightType,
     String? airline,
     String? flightNo,
@@ -171,6 +185,9 @@ class TripItem {
       time: time ?? this.time,
       photos: photos ?? List<String>.from(this.photos),
       locationUrl: locationUrl ?? this.locationUrl,
+      slotGroupId: slotGroupId ?? this.slotGroupId,
+      candidateLabel: candidateLabel ?? this.candidateLabel,
+      isSelected: isSelected ?? this.isSelected,
       flightType: flightType ?? this.flightType,
       airline: airline ?? this.airline,
       flightNo: flightNo ?? this.flightNo,
@@ -228,6 +245,9 @@ class TripItem {
       if (photos.isNotEmpty) 'photoDataUrl': photos.first,
       if (photos.isNotEmpty) 'photoId': 'photo-1',
       if (locationUrl.isNotEmpty) 'locationUrl': locationUrl,
+      'slotGroupId': slotGroupId,
+      'candidateLabel': candidateLabel,
+      'isSelected': isSelected,
       'flightType': flightType,
       'airline': airline,
       'flightNo': flightNo,
@@ -315,6 +335,9 @@ class TripItem {
       time: json['time'] as String? ?? '',
       photos: parsePhotos(json['photos'], json['photoDataUrl']),
       locationUrl: json['locationUrl'] as String? ?? json['link'] as String? ?? '',
+      slotGroupId: json['slotGroupId'] as String? ?? '',
+      candidateLabel: json['candidateLabel'] as String? ?? '1',
+      isSelected: json['isSelected'] as bool? ?? true,
       flightType: json['flightType'] as String? ?? 'DEPARTURE',
       airline: json['airline'] as String? ?? '',
       flightNo: json['flightNo'] as String? ?? '',

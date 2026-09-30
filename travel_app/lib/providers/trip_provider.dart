@@ -1,6 +1,6 @@
-/// @intent 여행 계획 중앙 상태 관리자(TripProvider) - 다중 여행 및 CRUD, 영구 저장소 동기화 지원 (Modified: 일정 삭제 시 Supabase Storage 연결 사진 비동기 정리 및 DB 동기화 강화)
+/// @intent 여행 계획 중앙 상태 관리자(TripProvider) - 다중 여행 CRUD 및 일정 후보/대안 플랜(Slot Grouping, selectCandidate) 지원
 /// @agent Gemini/manager-develop
-/// @branch feat/flutter-migration
+/// @branch feat/flutter-travel-app
 /// @author @developer_name
 /// @date 2026-09-30
 library;
@@ -64,6 +64,24 @@ class TripProvider extends ChangeNotifier {
     }
     final targetDay = _selectedDay is int ? _selectedDay as int : int.tryParse(_selectedDay.toString()) ?? 1;
     return currentTrip.items.where((item) => item.day == targetDay).toList();
+  }
+
+  /// 현재 선택된 일차(또는 전체)에서 확정/활성(isSelected == true) 상태인 대표 아이템 목록 반환
+  List<TripItem> get activeItemsForSelectedDay {
+    return itemsForSelectedDay.where((item) => item.isSelected).toList();
+  }
+
+  /// 특정 일차(또는 전체)의 아이템들을 effectiveSlotId 기준으로 슬롯 그룹핑하여 맵으로 반환
+  Map<String, List<TripItem>> getSlotGroupsForDay(dynamic day) {
+    final List<TripItem> items = (day == 'all')
+        ? currentTrip.items
+        : currentTrip.items.where((i) => i.day == (day is int ? day : int.tryParse(day.toString()) ?? 1)).toList();
+
+    final Map<String, List<TripItem>> slotGroups = {};
+    for (final item in items) {
+      slotGroups.putIfAbsent(item.effectiveSlotId, () => []).add(item);
+    }
+    return slotGroups;
   }
 
   bool get isSyncing => _isSyncing;
@@ -380,7 +398,23 @@ class TripProvider extends ChangeNotifier {
       (i) => i?.id == id,
       orElse: () => null,
     );
-    final updatedItems = _trips[tripIdx].items.where((i) => i.id != id).toList();
+    if (targetItem == null) return false;
+
+    var updatedItems = _trips[tripIdx].items.where((i) => i.id != id).toList();
+
+    // 활성(isSelected == true) 아이템이 삭제되었고, 동일 슬롯에 다른 후보가 남아있다면 첫 번째 후보를 자동 승격
+    if (targetItem.isSelected) {
+      final remainingSlotItems = updatedItems.where((i) => i.effectiveSlotId == targetItem.effectiveSlotId).toList();
+      if (remainingSlotItems.isNotEmpty && !remainingSlotItems.any((i) => i.isSelected)) {
+        final firstRemainingId = remainingSlotItems.first.id;
+        updatedItems = updatedItems.map((item) {
+          if (item.id == firstRemainingId) {
+            return item.copyWith(isSelected: true);
+          }
+          return item;
+        }).toList();
+      }
+    }
 
     if (_selectedItemId == id) {
       _selectedItemId = null;
@@ -391,7 +425,7 @@ class TripProvider extends ChangeNotifier {
     notifyListeners();
 
     // 클라우드 Storage 사진 파일 비동기 정리
-    if (targetItem != null && targetItem.photos.isNotEmpty) {
+    if (targetItem.photos.isNotEmpty) {
       for (final photo in targetItem.photos) {
         if (photo.contains('trip-photos')) {
           _supabaseService.deletePhoto(photo);
@@ -400,5 +434,91 @@ class TripProvider extends ChangeNotifier {
     }
 
     return originalLen != updatedItems.length;
+  }
+
+  /// 동일 슬롯(effectiveSlotId) 내에서 targetItemId를 활성(isSelected = true) 후보로 선택하고 나머지를 false로 변경
+  void selectCandidate(String targetItemId) {
+    final tripIdx = _trips.indexWhere((t) => t.metadata.id == _currentTripId);
+    if (tripIdx == -1) return;
+
+    final currentItems = _trips[tripIdx].items;
+    final targetItem = currentItems.cast<TripItem?>().firstWhere(
+          (i) => i?.id == targetItemId,
+          orElse: () => null,
+        );
+    if (targetItem == null) return;
+
+    final targetSlotId = targetItem.effectiveSlotId;
+    final updatedItems = currentItems.map((item) {
+      if (item.effectiveSlotId == targetSlotId) {
+        return item.copyWith(isSelected: item.id == targetItemId);
+      }
+      return item;
+    }).toList();
+
+    _trips[tripIdx] = _trips[tripIdx].copyWith(items: updatedItems);
+    _persist();
+    notifyListeners();
+  }
+
+  /// 기존 baseItem의 슬롯에 새로운 후보(대안 플랜) 아이템 추가
+  TripItem? addCandidateItem({required TripItem baseItem, required TripItem candidateItem}) {
+    final tripIdx = _trips.indexWhere((t) => t.metadata.id == _currentTripId);
+    if (tripIdx == -1) return null;
+
+    final currentItems = List<TripItem>.from(_trips[tripIdx].items);
+    final baseIndex = currentItems.indexWhere((i) => i.id == baseItem.id);
+    if (baseIndex == -1) return null;
+
+    // 1. baseItem의 slotGroupId 확보 (기존에 비어있으면 생성 후 baseItem 갱신)
+    String assignedSlotId = baseItem.slotGroupId;
+    if (assignedSlotId.isEmpty) {
+      assignedSlotId = 'slot-${baseItem.day}-${DateTime.now().millisecondsSinceEpoch}';
+      final updatedBase = baseItem.copyWith(
+        slotGroupId: assignedSlotId,
+        candidateLabel: baseItem.candidateLabel.isNotEmpty ? baseItem.candidateLabel : '1',
+        isSelected: true,
+      );
+      currentItems[baseIndex] = updatedBase;
+    }
+
+    // 2. 현재 슬롯에 속한 후보 개수 확인하여 다음 라벨 지정
+    final existingCandidates = currentItems.where((i) => i.effectiveSlotId == assignedSlotId).toList();
+    final nextSeq = existingCandidates.length + 1;
+    final nextLabel = candidateItem.candidateLabel.isNotEmpty && candidateItem.candidateLabel != '1'
+        ? candidateItem.candidateLabel
+        : '$nextSeq';
+
+    // 3. 신규 후보 아이템 생성 (기본값: isSelected = false)
+    final newCandidateId = candidateItem.id.isNotEmpty
+        ? candidateItem.id
+        : 'item-${DateTime.now().millisecondsSinceEpoch}-${_uuid.v4().substring(0, 4)}';
+
+    final finalCandidate = candidateItem.copyWith(
+      id: newCandidateId,
+      day: baseItem.day,
+      slotGroupId: assignedSlotId,
+      candidateLabel: nextLabel,
+      isSelected: false,
+    );
+
+    // baseItem의 슬롯 그룹 마지막 아이템 바로 뒤에 삽입
+    int insertIdx = baseIndex + 1;
+    for (int i = currentItems.length - 1; i >= 0; i--) {
+      if (currentItems[i].effectiveSlotId == assignedSlotId) {
+        insertIdx = i + 1;
+        break;
+      }
+    }
+    if (insertIdx > currentItems.length) {
+      insertIdx = currentItems.length;
+    }
+    currentItems.insert(insertIdx, finalCandidate);
+
+    _trips[tripIdx] = _trips[tripIdx].copyWith(items: currentItems);
+    _persist();
+    notifyListeners();
+
+    return finalCandidate;
   }
 }

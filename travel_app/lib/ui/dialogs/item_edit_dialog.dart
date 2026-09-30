@@ -1,7 +1,7 @@
 /*
- * @intent 새 일정 추가/수정 바텀시트 모달 - 6대 카테고리 3x2 그리드, Search-First 장소 검색, 지도 기반 핀 미세조정, 현재 일차 자동 배정 ChoiceChip 바 및 비용 입력 시 실시간 천 단위 콤마(,) 자동 포맷팅 완비
+ * @intent 새 일정 추가/수정 바텀시트 모달 - 6대 카테고리 3x2 그리드, Search-First 장소 검색, 지도 기반 핀 미세조정, 현재 일차 자동 배정 및 대안 플랜(후보) 등록 지원
  * @agent  Gemini/manager-develop
- * @branch feat/flutter-migration
+ * @branch feat/flutter-travel-app
  * @author @developer_name
  * @date   2026-09-30
  */
@@ -22,11 +22,15 @@ import 'package:url_launcher/url_launcher.dart';
 
 class ItemEditDialog extends StatefulWidget {
   final TripItem? item;
+  final TripItem? baseItem;
+  final bool isCandidateMode;
   final VoidCallback? onOpenMapPicker;
 
   const ItemEditDialog({
     super.key,
     this.item,
+    this.baseItem,
+    this.isCandidateMode = false,
     this.onOpenMapPicker,
   });
 
@@ -42,6 +46,24 @@ class ItemEditDialog extends StatefulWidget {
       backgroundColor: Colors.transparent,
       builder: (_) => ItemEditDialog(
         item: item,
+        onOpenMapPicker: onOpenMapPicker,
+      ),
+    );
+  }
+
+  /// 특정 일정에 대한 대안 플랜(후보) 등록 전용 모달 헬퍼
+  static Future<void> showCandidate(
+    BuildContext context, {
+    required TripItem baseItem,
+    VoidCallback? onOpenMapPicker,
+  }) {
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ItemEditDialog(
+        baseItem: baseItem,
+        isCandidateMode: true,
         onOpenMapPicker: onOpenMapPicker,
       ),
     );
@@ -121,14 +143,15 @@ class _ItemEditDialogState extends State<ItemEditDialog> {
   void initState() {
     super.initState();
     final item = widget.item;
+    final base = widget.baseItem;
     final meta = context.read<TripProvider>().currentTrip.metadata;
     final currentDay = context.read<TripProvider>().selectedDay;
     final defaultDay = (currentDay == 'all' ? 1 : (currentDay is int ? currentDay : 1));
 
-    _category = item?.category ?? 'ATTRACTION';
+    _category = item?.category ?? base?.category ?? 'ATTRACTION';
     _titleController = TextEditingController(text: item?.title ?? '');
-    _day = item?.day ?? defaultDay;
-    _timeController = TextEditingController(text: item?.time ?? '');
+    _day = item?.day ?? base?.day ?? defaultDay;
+    _timeController = TextEditingController(text: item?.time ?? base?.time ?? '');
     final initialCost = item != null && item.cost > 0
         ? (item.cost % 1 == 0
             ? NumberFormat('#,###').format(item.cost.toInt())
@@ -522,7 +545,13 @@ class _ItemEditDialogState extends State<ItemEditDialog> {
       transferMemo: _transferMemoController.text.trim(),
     );
 
-    if (isNew) {
+    if (widget.isCandidateMode && widget.baseItem != null) {
+      provider.addCandidateItem(
+        baseItem: widget.baseItem!,
+        candidateItem: updated,
+      );
+      AppToast.success(context, '대안 플랜(후보)이 추가되었습니다.');
+    } else if (isNew) {
       provider.addItem(updated);
     } else {
       provider.updateItem(updated.id, updated);
@@ -535,6 +564,7 @@ class _ItemEditDialogState extends State<ItemEditDialog> {
   Widget build(BuildContext context) {
     final meta = context.watch<TripProvider>().currentTrip.metadata;
     final isEditing = widget.item != null;
+    final isCandidate = widget.isCandidateMode;
     final mediaQuery = MediaQuery.of(context);
 
     return AnimatedPadding(
@@ -589,16 +619,39 @@ class _ItemEditDialogState extends State<ItemEditDialog> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(
-                          isEditing ? Icons.edit_note : Icons.add_location_alt,
+                          isCandidate
+                              ? Icons.alt_route_rounded
+                              : (isEditing ? Icons.edit_note : Icons.add_location_alt),
                           color: AppTheme.primary,
                           size: 20,
                         ),
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        isEditing ? '일정 수정' : '새 일정 추가',
+                        isCandidate
+                            ? '대안 플랜(후보) 추가'
+                            : (isEditing ? '일정 수정' : '새 일정 추가'),
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
+                      if (isCandidate && widget.baseItem != null) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: const Color(0xFFBFDBFE)),
+                          ),
+                          child: Text(
+                            'Day $_day',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF2563EB),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   IconButton(

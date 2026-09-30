@@ -1,6 +1,6 @@
-/// @intent 대화형 지도(flutter_map) 기반 일차별 마커, Polyline 동선, 활성 상태 표시형 일반/위성 세그먼트 스위처 및 장소 한눈에 보기 컨트롤
+/// @intent 대화형 지도(flutter_map) 기반 일차별 확정 마커(activeItemsForSelectedDay), Polyline 동선, 일반/위성 세그먼트 스위처
 /// @agent Gemini/manager-develop
-/// @branch feat/flutter-migration
+/// @branch feat/flutter-travel-app
 /// @author @developer_name
 /// @date 2026-09-30
 library;
@@ -207,7 +207,7 @@ class _MapTabState extends State<MapTab> with AutomaticKeepAliveClientMixin {
   Widget build(BuildContext context) {
     super.build(context);
     final provider = context.watch<TripProvider>();
-    final items = provider.itemsForSelectedDay;
+    final items = provider.activeItemsForSelectedDay;
 
     // 좌표가 유효한 아이템만 필터링
     final allItemsWithCoord = items.where((i) => i.hasCoordinates).toList();
